@@ -1,13 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import ForgeReconciler, {
   Box,
-  CodeBlock,
-  Form,
-  FormFooter,
-  HelperMessage,
-  Label,
-  LoadingButton,
-  RequiredAsterisk,
+  Button,
   SectionMessage,
   Spinner,
   Stack,
@@ -16,227 +10,138 @@ import ForgeReconciler, {
   TabPanel,
   Tabs,
   Text,
-  Textfield,
-  Toggle,
-  useForm,
   xcss,
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { GapsTab } from './components/GapsTab';
+import { HistoryTab } from './components/HistoryTab';
+import { MatrixTab } from './components/MatrixTab';
+import { OverviewTab } from './components/OverviewTab';
+import { SettingsTab } from './components/SettingsTab';
 
-const LIST_FIELDS = ['implementationTypes', 'testTypes', 'passedStatuses', 'failedStatuses'];
-
-const TEXT_FIELDS = [
-  {
-    name: 'requirementJql',
-    label: 'Requirement JQL',
-    help: 'Finds the work items TraceGuard treats as requirements.',
-    required: true,
-  },
-  {
-    name: 'implementationTypes',
-    label: 'Implementation work types',
-    help: 'Comma-separated, for example: Story, Task, Bug',
-  },
-  { name: 'testTypes', label: 'Test work types', help: 'Comma-separated, for example: Test' },
-  { name: 'passedStatuses', label: 'Passed statuses', help: 'Comma-separated, for example: Passed' },
-  { name: 'failedStatuses', label: 'Failed statuses', help: 'Comma-separated, for example: Failed' },
-  {
-    name: 'auditSpaceKey',
-    label: 'Audit Confluence space key',
-    help: 'Letters and digits only. Leave empty if not used yet.',
-  },
-  { name: 'llmModel', label: 'LLM model', help: 'Leave empty to use the default model.' },
-];
+const LOAD_ERROR = 'TraceGuard could not load this project. Please try again.';
+const SCAN_ERROR = 'The scan could not finish. Your last results are still shown. Please try again.';
 
 const panelStyle = xcss({ paddingBlock: 'space.200' });
 
-const errorMessage = (text) => ({ appearance: 'error', text });
-
-// The form edits lists as comma-separated text.
-const toFormValues = (settings) => ({
-  ...settings,
-  ...Object.fromEntries(LIST_FIELDS.map((field) => [field, settings[field].join(', ')])),
-});
-
-const StatusMessage = ({ message }) => (
-  <SectionMessage appearance={message.appearance}>
-    <Text>{message.text}</Text>
-  </SectionMessage>
-);
-
-const SettingsTextField = ({ field, register, getFieldId }) => (
-  <Box>
-    <Label labelFor={getFieldId(field.name)}>
-      {field.label}
-      {field.required && <RequiredAsterisk />}
-    </Label>
-    <Textfield {...register(field.name)} />
-    <HelperMessage>{field.help}</HelperMessage>
+const Panel = ({ children }) => (
+  <Box xcss={panelStyle}>
+    <ErrorBoundary>{children}</ErrorBoundary>
   </Box>
 );
 
-const SettingsForm = ({ settings, onSave }) => {
-  const { register, handleSubmit, getFieldId, formState } = useForm({
-    defaultValues: toFormValues(settings),
-  });
+// Shows loading and load errors, so a tab only renders once its data exists.
+const DataPanel = ({ data, loadError, onRetry, children }) => {
+  if (data) return <Panel>{children(data)}</Panel>;
 
   return (
-    <Form onSubmit={handleSubmit(onSave)}>
-      <Stack space="space.200">
-        {TEXT_FIELDS.map((field) => (
-          <SettingsTextField key={field.name} field={field} register={register} getFieldId={getFieldId} />
-        ))}
-        <Box>
-          <Label labelFor={getFieldId('commentOnNewGaps')}>Comment on new gaps</Label>
-          <Toggle {...register('commentOnNewGaps')} />
-          <HelperMessage>Adds a Jira comment when TraceGuard finds a new gap.</HelperMessage>
-        </Box>
-        <FormFooter>
-          <LoadingButton appearance="primary" type="submit" isLoading={formState.isSubmitting}>
-            Save
-          </LoadingButton>
-        </FormFooter>
-      </Stack>
-    </Form>
+    <Panel>
+      {loadError ? (
+        <Stack space="space.200">
+          <SectionMessage appearance="error">
+            <Text>{loadError}</Text>
+          </SectionMessage>
+          <Box>
+            <Button onClick={onRetry}>Try again</Button>
+          </Box>
+        </Stack>
+      ) : (
+        <Spinner label="Loading traceability" />
+      )}
+    </Panel>
   );
 };
 
-const SettingsTab = () => {
-  const [settings, setSettings] = useState(null);
-  const [formVersion, setFormVersion] = useState(0);
-  const [message, setMessage] = useState(null);
+const App = () => {
+  const [data, setData] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const [scanError, setScanError] = useState(null);
+  const [warnings, setWarnings] = useState([]);
+  const [isScanning, setIsScanning] = useState(false);
 
-  useEffect(() => {
-    invoke('getSettings')
-      .then((result) => {
-        if (result.ok) setSettings(result.settings);
-        else setMessage(errorMessage(result.error));
-      })
-      .catch(() => setMessage(errorMessage('Could not load settings. Please try again.')));
+  const load = useCallback(async () => {
+    setLoadError(null);
+    try {
+      const response = await invoke('getOverview');
+      if (response.ok) setData(response);
+      else setLoadError(response.error);
+    } catch {
+      setLoadError(LOAD_ERROR);
+    }
   }, []);
 
-  const save = async (values) => {
-    setMessage(null);
-    try {
-      const result = await invoke('saveSettings', values);
-      if (!result.ok) {
-        setMessage(errorMessage(result.error));
-        return;
-      }
-      setSettings(result.settings);
-      // A new key rebuilds the form so it shows the cleaned, saved values.
-      setFormVersion((version) => version + 1);
-      setMessage({ appearance: 'success', text: 'Settings saved.' });
-    } catch {
-      setMessage(errorMessage('Could not save settings. Please try again.'));
-    }
-  };
-
-  if (!settings) {
-    return message ? <StatusMessage message={message} /> : <Spinner label="Loading settings" />;
-  }
-
-  return (
-    <Stack space="space.200">
-      {message && <StatusMessage message={message} />}
-      <SettingsForm key={formVersion} settings={settings} onSave={save} />
-    </Stack>
-  );
-};
-
-const ScanResult = ({ result }) => (
-  <Stack space="space.100">
-    {result.warnings.map((warning) => (
-      <StatusMessage key={warning} message={{ appearance: 'warning', text: warning }} />
-    ))}
-    {result.latestRun && (
-      <Text>
-        Total: {result.latestRun.total} | Green: {result.latestRun.green} | Amber: {result.latestRun.amber} | Red:{' '}
-        {result.latestRun.red}
-      </Text>
-    )}
-    <Text>First 3 requirements:</Text>
-    <CodeBlock language="json" text={JSON.stringify(result.matrix.slice(0, 3), null, 2)} />
-  </Stack>
-);
-
-// Temporary view for testing the scanner.
-const OverviewTab = () => {
-  const [result, setResult] = useState(null);
-  const [error, setError] = useState(null);
-  const [isScanning, setIsScanning] = useState(false);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const rescan = async () => {
     setIsScanning(true);
-    setError(null);
+    setScanError(null);
+    setWarnings([]);
     try {
       const response = await invoke('rescan');
       if (response.ok) {
-        setResult(response);
+        setData(response);
+        setWarnings(response.warnings ?? []);
       } else {
-        setResult(null);
-        setError(response.error);
+        setScanError(response.error);
       }
     } catch {
-      setResult(null);
-      setError('Could not run the scan. Please try again.');
+      setScanError(SCAN_ERROR);
     } finally {
       setIsScanning(false);
     }
   };
 
+  const dataPanelProps = { data, loadError, onRetry: load };
+
   return (
-    <Stack space="space.200">
-      <Box>
-        <LoadingButton appearance="primary" isLoading={isScanning} onClick={rescan}>
-          Rescan
-        </LoadingButton>
-      </Box>
-      {error && <StatusMessage message={errorMessage(error)} />}
-      {result && <ScanResult result={result} />}
-    </Stack>
+    <Tabs id="traceguard-tabs">
+      <TabList>
+        <Tab>Overview</Tab>
+        <Tab>Matrix</Tab>
+        <Tab>Gaps</Tab>
+        <Tab>History</Tab>
+        <Tab>Settings</Tab>
+      </TabList>
+      <TabPanel>
+        <DataPanel {...dataPanelProps}>
+          {(loaded) => (
+            <OverviewTab
+              data={loaded}
+              isScanning={isScanning}
+              onRescan={rescan}
+              scanError={scanError}
+              warnings={warnings}
+            />
+          )}
+        </DataPanel>
+      </TabPanel>
+      <TabPanel>
+        <DataPanel {...dataPanelProps}>{(loaded) => <MatrixTab matrix={loaded.matrix} />}</DataPanel>
+      </TabPanel>
+      <TabPanel>
+        <DataPanel {...dataPanelProps}>
+          {(loaded) => <GapsTab openGaps={loaded.openGaps} hasScan={Boolean(loaded.lastScan)} />}
+        </DataPanel>
+      </TabPanel>
+      <TabPanel>
+        <DataPanel {...dataPanelProps}>{(loaded) => <HistoryTab history={loaded.history} />}</DataPanel>
+      </TabPanel>
+      <TabPanel>
+        <Panel>
+          <SettingsTab />
+        </Panel>
+      </TabPanel>
+    </Tabs>
   );
 };
 
-const PlaceholderPanel = ({ name }) => (
-  <Box xcss={panelStyle}>
-    <Text>{name} - coming soon</Text>
-  </Box>
-);
-
-const ProjectPage = () => (
-  <Tabs id="traceguard-tabs">
-    <TabList>
-      <Tab>Overview</Tab>
-      <Tab>Matrix</Tab>
-      <Tab>Gaps</Tab>
-      <Tab>History</Tab>
-      <Tab>Settings</Tab>
-    </TabList>
-    <TabPanel>
-      <Box xcss={panelStyle}>
-        <OverviewTab />
-      </Box>
-    </TabPanel>
-    <TabPanel>
-      <PlaceholderPanel name="Matrix" />
-    </TabPanel>
-    <TabPanel>
-      <PlaceholderPanel name="Gaps" />
-    </TabPanel>
-    <TabPanel>
-      <PlaceholderPanel name="History" />
-    </TabPanel>
-    <TabPanel>
-      <Box xcss={panelStyle}>
-        <SettingsTab />
-      </Box>
-    </TabPanel>
-  </Tabs>
-);
-
 ForgeReconciler.render(
   <React.StrictMode>
-    <ProjectPage />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>
 );

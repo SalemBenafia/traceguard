@@ -1,7 +1,7 @@
 import Resolver from '@forge/resolver';
-import { getHistory, getLatestScanRun, getMatrix } from './db/repo';
+import { getHistory, getMatrix, getOpenGaps } from './db/repo';
 import { RequirementJqlError } from './engine/jql';
-import { filterForViewer, referencedIssueKeys } from './engine/visibility';
+import { filterForViewer, filterGapsForViewer, referencedIssueKeys } from './engine/visibility';
 import { hasProjectPermission, visibleIssueKeys } from './jira/client';
 import { scanProject } from './scanner';
 import { getSettings, saveSettings, SettingsValidationError } from './settings';
@@ -20,6 +20,24 @@ async function matrixForViewer(projectKey) {
   const matrix = await getMatrix(projectKey);
   const visibleKeys = await visibleIssueKeys(referencedIssueKeys(matrix));
   return filterForViewer(matrix, visibleKeys);
+}
+
+// Everything the project page shows, limited to what this viewer can see.
+async function dashboardForViewer(projectKey) {
+  const matrix = await getMatrix(projectKey);
+  const openGaps = await getOpenGaps(projectKey);
+  const history = await getHistory(projectKey);
+  const visibleKeys = await visibleIssueKeys([
+    ...referencedIssueKeys(matrix),
+    ...openGaps.map((gap) => gap.req_key),
+  ]);
+
+  return {
+    matrix: filterForViewer(matrix, visibleKeys),
+    openGaps: filterGapsForViewer(openGaps, visibleKeys),
+    history,
+    lastScan: history[0] ?? null,
+  };
 }
 
 resolver.define('getSettings', async ({ context }) => {
@@ -64,16 +82,21 @@ resolver.define('rescan', async ({ context }) => {
       source: 'manual',
       timeBudgetMs: RESCAN_TIME_BUDGET_MS,
     });
-    return {
-      ok: true,
-      matrix: await matrixForViewer(projectKey),
-      latestRun: await getLatestScanRun(projectKey),
-      warnings,
-    };
+    return { ok: true, ...(await dashboardForViewer(projectKey)), warnings };
   } catch (error) {
     if (error instanceof RequirementJqlError) return failure(error.message);
     throw error;
   }
+});
+
+resolver.define('getOverview', async ({ context }) => {
+  const projectKey = projectKeyFrom(context);
+  if (!projectKey) return failure(NO_PROJECT_ERROR);
+
+  if (!(await hasProjectPermission(projectKey, 'BROWSE_PROJECTS'))) {
+    return failure('You need access to this project to view its TraceGuard dashboard.');
+  }
+  return { ok: true, ...(await dashboardForViewer(projectKey)) };
 });
 
 resolver.define('getMatrix', async ({ context }) => {

@@ -50,7 +50,7 @@ describe('evaluate: green', () => {
 
     assert.equal(result.rag, 'green');
     assert.deepEqual(result.gaps, []);
-    assert.deepEqual(result.counts, { impl: 1, tests: 1, passed: 1, failed: 0 });
+    assert.deepEqual(result.counts, { impl: 1, implDone: 1, tests: 1, passed: 1, failed: 0 });
   });
 });
 
@@ -215,7 +215,7 @@ describe('evaluate: custom settings', () => {
     const result = evaluate(requirement(), [storyLink(), testLink()], custom);
 
     assert.deepEqual(gapCodes(result).sort(), ['NO_IMPLEMENTATION', 'NO_TEST']);
-    assert.deepEqual(result.counts, { impl: 0, tests: 0, passed: 0, failed: 0 });
+    assert.deepEqual(result.counts, { impl: 0, implDone: 0, tests: 0, passed: 0, failed: 0 });
   });
 });
 
@@ -226,7 +226,7 @@ describe('evaluate: several tests', () => {
 
     assert.deepEqual(gapCodes(result), ['TEST_FAILED']);
     assert.equal(result.rag, 'red');
-    assert.deepEqual(result.counts, { impl: 1, tests: 2, passed: 1, failed: 1 });
+    assert.deepEqual(result.counts, { impl: 1, implDone: 1, tests: 2, passed: 1, failed: 1 });
     assert.match(result.gaps[0].message, /1 linked test/);
   });
 

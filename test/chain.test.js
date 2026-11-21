@@ -150,7 +150,7 @@ describe('buildChain with evaluate', () => {
 
     assert.equal(result.rag, 'red');
     assert.deepEqual(result.gaps.map((gap) => gap.code), ['TEST_FAILED', 'IMPLEMENTATION_OPEN']);
-    assert.deepEqual(result.counts, { impl: 2, tests: 2, passed: 1, failed: 1 });
+    assert.deepEqual(result.counts, { impl: 2, implDone: 1, tests: 2, passed: 1, failed: 1 });
   });
 
   test('a change time added by the caller can raise STALE_VERIFICATION', () => {

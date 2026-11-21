@@ -44,6 +44,7 @@ export function evaluate(requirement, links, settings) {
     gaps,
     counts: {
       impl: implementation.length,
+      implDone: implementation.filter((item) => item.statusCategory === 'done').length,
       tests: tests.length,
       passed: passed.length,
       failed: failed.length,

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { filterForViewer, referencedIssueKeys } from '../src/engine/visibility.js';
+import { filterForViewer, filterGapsForViewer, referencedIssueKeys } from '../src/engine/visibility.js';
 
 const row = (reqKey, ...linkKeys) => ({
   req_key: reqKey,
@@ -35,5 +35,16 @@ describe('filterForViewer', () => {
     filterForViewer(matrix, new Set(['SPF-1']));
 
     assert.equal(matrix[0].chain.links.length, 1);
+  });
+});
+
+describe('filterGapsForViewer', () => {
+  test('hides gaps on requirements the viewer cannot see', () => {
+    const gaps = [
+      { req_key: 'SPF-1', gap_code: 'NO_TEST' },
+      { req_key: 'SPF-2', gap_code: 'NO_OWNER' },
+    ];
+
+    assert.deepEqual(filterGapsForViewer(gaps, new Set(['SPF-2'])), [gaps[1]]);
   });
 });
