@@ -2,9 +2,10 @@ import Resolver from '@forge/resolver';
 
 const resolver = new Resolver();
 
-resolver.define('getText', (req) => {
-  console.log(req);
-  return 'Hello, world!';
+// One resolver function serves both the project page and the issue panel.
+resolver.define('getStatus', () => {
+  console.log('[TG] stub resolver');
+  return { stub: true, name: 'resolver' };
 });
 
 export const handler = resolver.getDefinitions();

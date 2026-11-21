@@ -1,20 +1,160 @@
 modules:
   jira:projectPage:
-    - key: traceguard-hello-world-project-page
+    - key: traceguard-project-page
       resource: main
       resolver:
         function: resolver
       render: native
-      title: traceguard
+      title: TraceGuard
+  jira:issuePanel:
+    - key: traceguard-issue-panel
+      resource: panel
+      resolver:
+        function: resolver
+      render: native
+      title: Traceability
+      icon: https://developer.atlassian.com/platform/forge/images/icons/issue-panel-icon.svg
+  trigger:
+    - key: traceguard-jira-events
+      function: on-jira-event
+      events:
+        - avi:jira:updated:issue
+        - avi:jira:created:issuelink
+        - avi:jira:deleted:issuelink
+      filter:
+        ignoreSelf: true # skip events caused by TraceGuard itself
+  scheduledTrigger:
+    - key: traceguard-nightly-scan
+      function: nightly-scan
+      interval: day
+    - key: traceguard-migrations
+      function: run-migrations
+      interval: hour
+  sql:
+    - key: main
+      engine: mysql
+  llm:
+    - key: traceguard-llm
+      model:
+        - claude
+  rovo:agent:
+    - key: traceguard-audit-assistant
+      name: TraceGuard Audit Assistant # Forge limit: 30 characters
+      description: Checks if regulated Jira projects are audit-ready and builds audit packs.
+      prompt: |
+        Placeholder prompt for the TraceGuard Audit Assistant.
+        The full instructions are added in Phase 12.
+      conversationStarters:
+        - Which requirements are not audit-ready?
+        - Explain the trace for a requirement
+        - Create an audit pack in Confluence
+      actions:
+        - tg-get-trace-summary
+        - tg-get-requirement-trace
+        - tg-list-gaps
+        - tg-create-audit-pack
+  action:
+    - key: tg-get-trace-summary
+      name: Get trace summary
+      function: action-trace-summary
+      actionVerb: GET
+      description: Returns audit readiness (counts and top gaps) for a Jira project.
+      inputs:
+        projectKey:
+          title: Project key
+          type: string
+          required: false
+          description: Jira project key such as SPF. Empty means the current project.
+    - key: tg-get-requirement-trace
+      name: Get requirement trace
+      function: action-req-trace
+      actionVerb: GET
+      description: Returns the implementation and test trace for one Jira requirement.
+      inputs:
+        requirementKey:
+          title: Requirement key
+          type: string
+          required: true
+          description: Jira issue key of the requirement to explain, such as SPF-12.
+    - key: tg-list-gaps
+      name: List audit gaps
+      function: action-list-gaps
+      actionVerb: GET
+      description: Lists traceability gaps for a Jira project, optionally filtered by severity.
+      inputs:
+        projectKey:
+          title: Project key
+          type: string
+          required: false
+          description: Jira project key such as SPF. Empty means the current project.
+        severity:
+          title: Severity
+          type: string
+          required: false
+          description: Gap severity to include, either "red" or "amber". Empty means all gaps.
+    - key: tg-create-audit-pack
+      name: Create audit pack
+      function: action-audit-pack
+      actionVerb: CREATE
+      description: Creates an audit pack page in Confluence for a Jira project and release.
+      inputs:
+        projectKey:
+          title: Project key
+          type: string
+          required: false
+          description: Jira project key such as SPF. Empty means the current project.
+        spaceKey:
+          title: Confluence space key
+          type: string
+          required: false
+          description: Key of the Confluence space that receives the audit pack, such as QA.
+        releaseName:
+          title: Release name
+          type: string
+          required: false
+          description: Release the audit pack covers, such as 2.4.0. Empty means no specific release.
   function:
     - key: resolver
       handler: index.handler
+    - key: on-jira-event
+      handler: triggers.onJiraEvent
+    - key: nightly-scan
+      handler: triggers.nightlyScan
+      timeoutSeconds: 900
+    - key: run-migrations
+      handler: db/migrations.runMigrations
+    - key: action-trace-summary
+      handler: actions.traceSummary
+    - key: action-req-trace
+      handler: actions.requirementTrace
+    - key: action-list-gaps
+      handler: actions.listGaps
+    - key: action-audit-pack
+      handler: actions.createAuditPack
 resources:
   - key: main
-    path: src/frontend/index.jsx
+    path: src/frontend/project-page.jsx
+  - key: panel
+    path: src/frontend/issue-panel.jsx
+permissions:
+  scopes:
+    - read:jira-work
+    - write:jira-work
+    - read:jira-user
+    - storage:app
+    - read:graph:user:atlassian
+    - read:graph:team:atlassian
+    - read:space:confluence
+    - read:page:confluence
+    - write:page:confluence
 app:
+  id: ari:cloud:ecosystem::app/fffe38dc-4926-4105-b596-2cd08d1e0369
   runtime:
     name: nodejs24.x
     memoryMB: 256
     architecture: arm64
-  id: ari:cloud:ecosystem::app/fffe38dc-4926-4105-b596-2cd08d1e0369
+  compatibility:
+    jira:
+      required: true
+    confluence:
+      required: false
