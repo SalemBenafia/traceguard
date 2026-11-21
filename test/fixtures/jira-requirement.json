@@ -1,0 +1,133 @@
+{
+  "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+  "id": "10007",
+  "self": "https://example.atlassian.net/rest/api/3/issue/10007",
+  "key": "SPF-7",
+  "fields": {
+    "summary": "Firmware updates are signature-verified",
+    "status": {
+      "self": "https://example.atlassian.net/rest/api/3/status/10010",
+      "description": "",
+      "iconUrl": "https://example.atlassian.net/images/icons/statuses/open.png",
+      "name": "In Review",
+      "id": "10010",
+      "statusCategory": {
+        "self": "https://example.atlassian.net/rest/api/3/statuscategory/4",
+        "id": 4,
+        "key": "indeterminate",
+        "colorName": "yellow",
+        "name": "In Progress"
+      }
+    },
+    "assignee": {
+      "self": "https://example.atlassian.net/rest/api/3/user?accountId=fixture-account-1",
+      "accountId": "fixture-account-1",
+      "displayName": "Demo Owner",
+      "active": true,
+      "timeZone": "UTC",
+      "accountType": "atlassian"
+    },
+    "issuelinks": [
+      {
+        "id": "20001",
+        "self": "https://example.atlassian.net/rest/api/3/issueLink/20001",
+        "type": { "id": "10003", "name": "Relates", "inward": "relates to", "outward": "relates to" },
+        "outwardIssue": {
+          "id": "10027",
+          "key": "SPF-27",
+          "self": "https://example.atlassian.net/rest/api/3/issue/10027",
+          "fields": {
+            "summary": "Implement: Firmware updates are signature-verified",
+            "status": {
+              "name": "Done",
+              "id": "10002",
+              "statusCategory": { "id": 3, "key": "done", "colorName": "green", "name": "Done" }
+            },
+            "priority": { "name": "High", "id": "2" },
+            "issuetype": { "id": "10001", "name": "Story", "subtask": false, "hierarchyLevel": 0 }
+          }
+        }
+      },
+      {
+        "id": "20002",
+        "self": "https://example.atlassian.net/rest/api/3/issueLink/20002",
+        "type": { "id": "10003", "name": "Relates", "inward": "relates to", "outward": "relates to" },
+        "inwardIssue": {
+          "id": "10028",
+          "key": "SPF-28",
+          "self": "https://example.atlassian.net/rest/api/3/issue/10028",
+          "fields": {
+            "summary": "Verify: Firmware updates are signature-verified",
+            "status": {
+              "name": "Passed",
+              "id": "10021",
+              "statusCategory": { "id": 3, "key": "done", "colorName": "green", "name": "Done" }
+            },
+            "priority": { "name": "High", "id": "2" },
+            "issuetype": { "id": "10005", "name": "Test", "subtask": false, "hierarchyLevel": 0 }
+          }
+        }
+      },
+      {
+        "id": "20003",
+        "self": "https://example.atlassian.net/rest/api/3/issueLink/20003",
+        "type": { "id": "10000", "name": "Blocks", "inward": "is blocked by", "outward": "blocks" },
+        "inwardIssue": {
+          "id": "10029",
+          "key": "SPF-29",
+          "self": "https://example.atlassian.net/rest/api/3/issue/10029",
+          "fields": {
+            "summary": "Rotate the firmware signing key",
+            "status": {
+              "name": "In Progress",
+              "id": "3",
+              "statusCategory": { "id": 4, "key": "indeterminate", "colorName": "yellow", "name": "In Progress" }
+            },
+            "priority": { "name": "Medium", "id": "3" },
+            "issuetype": { "id": "10002", "name": "Task", "subtask": false, "hierarchyLevel": 0 }
+          }
+        }
+      },
+      {
+        "id": "20004",
+        "self": "https://example.atlassian.net/rest/api/3/issueLink/20004",
+        "type": { "id": "10003", "name": "Relates", "inward": "relates to", "outward": "relates to" },
+        "outwardIssue": {
+          "id": "10030",
+          "key": "SPF-30",
+          "self": "https://example.atlassian.net/rest/api/3/issue/10030",
+          "fields": {
+            "summary": "Verify: rejected image keeps running firmware",
+            "status": {
+              "name": "Failed",
+              "id": "10022",
+              "statusCategory": { "id": 3, "key": "done", "colorName": "green", "name": "Done" }
+            },
+            "priority": { "name": "High", "id": "2" },
+            "issuetype": { "id": "10005", "name": "Test", "subtask": false, "hierarchyLevel": 0 }
+          }
+        }
+      },
+      {
+        "id": "20005",
+        "self": "https://example.atlassian.net/rest/api/3/issueLink/20005",
+        "type": { "id": "10001", "name": "Cloners", "inward": "is cloned by", "outward": "clones" },
+        "outwardIssue": {
+          "id": "10028",
+          "key": "SPF-28",
+          "self": "https://example.atlassian.net/rest/api/3/issue/10028",
+          "fields": {
+            "summary": "Verify: Firmware updates are signature-verified",
+            "status": {
+              "name": "Passed",
+              "id": "10021",
+              "statusCategory": { "id": 3, "key": "done", "colorName": "green", "name": "Done" }
+            },
+            "priority": { "name": "High", "id": "2" },
+            "issuetype": { "id": "10005", "name": "Test", "subtask": false, "hierarchyLevel": 0 }
+          }
+        }
+      }
+    ]
+  }
+}

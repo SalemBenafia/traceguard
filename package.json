@@ -5,6 +5,7 @@
   "license": "MIT",
   "private": true,
   "scripts": {
+    "test": "node --test \"test/**/*.test.js\"",
     "lint": "eslint src/**/*",
     "seed": "node --env-file=scripts/.env scripts/seed-demo.mjs",
     "seed:reset": "node --env-file=scripts/.env scripts/seed-demo.mjs --reset"
