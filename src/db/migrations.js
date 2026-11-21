@@ -39,11 +39,30 @@ const CREATE_GAP_EVENTS = `CREATE TABLE IF NOT EXISTS tg_gap_events (
   INDEX idx_gap_req (project_key, req_key)
 )`;
 
+// New gaps wait here until the nightly job comments on them.
+const CREATE_PENDING_GAP_COMMENTS = `CREATE TABLE IF NOT EXISTS tg_pending_gap_comments (
+  event_id VARCHAR(36) NOT NULL PRIMARY KEY,
+  project_key VARCHAR(32) NOT NULL,
+  req_key VARCHAR(64) NOT NULL,
+  gap_code VARCHAR(32) NOT NULL,
+  queued_at DATETIME NOT NULL,
+  INDEX idx_pending_project (project_key)
+)`;
+
+// One row per comment allowed each UTC day, so the daily limit stays exact.
+const CREATE_COMMENT_SLOTS = `CREATE TABLE IF NOT EXISTS tg_comment_slots (
+  comment_day VARCHAR(10) NOT NULL,
+  slot INT NOT NULL,
+  PRIMARY KEY (comment_day, slot)
+)`;
+
 // Declared once at module level, as Forge recommends.
 const runner = migrationRunner
   .enqueue('v001_tg_requirements', CREATE_REQUIREMENTS)
   .enqueue('v002_tg_scan_runs', CREATE_SCAN_RUNS)
-  .enqueue('v003_tg_gap_events', CREATE_GAP_EVENTS);
+  .enqueue('v003_tg_gap_events', CREATE_GAP_EVENTS)
+  .enqueue('v004_tg_pending_gap_comments', CREATE_PENDING_GAP_COMMENTS)
+  .enqueue('v005_tg_comment_slots', CREATE_COMMENT_SLOTS);
 
 let ready = false;
 

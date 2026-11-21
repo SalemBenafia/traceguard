@@ -4,10 +4,11 @@ import { buildChain } from './engine/chain';
 import { latestContentChange, latestMoveToStatus } from './engine/changelog';
 import { mapWithLimit } from './engine/concurrency';
 import { requirementJql, RequirementJqlError } from './engine/jql';
-import { sameLinkedIssues } from './engine/issueTrace';
+import { groupKeysByProject } from './engine/gapComment';
+import { linkedIssueKeys, sameLinkedIssues } from './engine/issueTrace';
 import { evaluate } from './engine/rules';
-import { getChangelog, searchAll } from './jira/client';
-import { getSettings } from './settings';
+import { getChangelog, getIssue, searchAll } from './jira/client';
+import { getSavedSettings, getSettings } from './settings';
 
 const MAX_REQUIREMENTS = 500;
 const MAX_PARALLEL_REQUIREMENTS = 5;
@@ -137,6 +138,48 @@ export async function isRequirement(projectKey, issueKey, settings) {
 }
 
 const projectKeyOf = (issueKey) => issueKey.slice(0, issueKey.lastIndexOf('-'));
+
+// A bad JQL in one project must not stop events for the others, so it counts as no match.
+async function savedRequirementKeys(projectKey, keys) {
+  const settings = await getSavedSettings(projectKey);
+  if (!settings) return [];
+
+  try {
+    const jql = requirementJql(projectKey, settings.requirementJql, keys);
+    const issues = await searchAll(jql, ['summary'], { asUser: false, max: keys.length });
+    return issues.map((issue) => issue.key);
+  } catch (error) {
+    if (error instanceof RequirementJqlError || error.status === 400) {
+      console.error(`[TG] Requirement JQL failed for ${projectKey}: ${error.message}`);
+      return [];
+    }
+    throw error;
+  }
+}
+
+async function readIssueLinks(issueIdOrKey) {
+  try {
+    return await getIssue(issueIdOrKey, ['issuelinks'], { asUser: false });
+  } catch (error) {
+    // The work item may have been deleted before this event arrived.
+    if (error.status === 404) return null;
+    throw error;
+  }
+}
+
+export async function findRequirementKeysForIssue(issueIdOrKey) {
+  const issue = await readIssueLinks(issueIdOrKey);
+  if (!issue) return [];
+
+  const ownMatch = await savedRequirementKeys(projectKeyOf(issue.key), [issue.key]);
+  if (ownMatch.length > 0) return ownMatch;
+
+  const requirementKeys = [];
+  for (const [projectKey, keys] of groupKeysByProject(linkedIssueKeys(issue))) {
+    requirementKeys.push(...(await savedRequirementKeys(projectKey, keys)));
+  }
+  return requirementKeys;
+}
 
 export async function scanRequirements(keys, options) {
   const uniqueKeys = [...new Set(keys)];

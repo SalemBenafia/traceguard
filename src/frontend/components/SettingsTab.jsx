@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import {
   Box,
+  Button,
   Form,
   FormFooter,
+  Heading,
   HelperMessage,
   Label,
   LoadingButton,
@@ -84,16 +86,64 @@ const SettingsForm = ({ settings, onSave }) => {
   );
 };
 
+const nightlyResultText = ({ scanned, commentsPosted, commentsWaiting }) =>
+  `Nightly job finished: ${scanned} requirements scanned, ${commentsPosted} comments posted, ` +
+  `${commentsWaiting} comments waiting.`;
+
+const NightlyRunner = () => {
+  const [isRunning, setIsRunning] = useState(false);
+  const [messages, setMessages] = useState([]);
+
+  const run = async () => {
+    setIsRunning(true);
+    setMessages([]);
+    try {
+      const result = await invoke('runNightlyNow');
+      if (!result.ok) {
+        setMessages([errorMessage(result.error)]);
+        return;
+      }
+      setMessages([
+        { appearance: 'success', text: nightlyResultText(result) },
+        ...result.warnings.map((text) => ({ appearance: 'warning', text })),
+      ]);
+    } catch {
+      setMessages([errorMessage('The nightly job could not finish. Please try again.')]);
+    } finally {
+      setIsRunning(false);
+    }
+  };
+
+  return (
+    <Stack space="space.100">
+      <Heading size="xsmall">Nightly job</Heading>
+      {messages.map((message) => (
+        <StatusMessage key={message.text} message={message} />
+      ))}
+      <Box>
+        <Button onClick={run} isDisabled={isRunning}>
+          {isRunning ? 'Running...' : 'Run nightly job now'}
+        </Button>
+      </Box>
+    </Stack>
+  );
+};
+
 export const SettingsTab = () => {
   const [settings, setSettings] = useState(null);
+  const [canRunNightly, setCanRunNightly] = useState(false);
   const [formVersion, setFormVersion] = useState(0);
   const [message, setMessage] = useState(null);
 
   useEffect(() => {
     invoke('getSettings')
       .then((result) => {
-        if (result.ok) setSettings(result.settings);
-        else setMessage(errorMessage(result.error));
+        if (result.ok) {
+          setSettings(result.settings);
+          setCanRunNightly(result.canRunNightly === true);
+        } else {
+          setMessage(errorMessage(result.error));
+        }
       })
       .catch(() => setMessage(errorMessage('Could not load settings. Please try again.')));
   }, []);
@@ -123,6 +173,7 @@ export const SettingsTab = () => {
     <Stack space="space.200">
       {message && <StatusMessage message={message} />}
       <SettingsForm key={formVersion} settings={settings} onSave={save} />
+      {canRunNightly && <NightlyRunner />}
     </Stack>
   );
 };

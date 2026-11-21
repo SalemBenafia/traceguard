@@ -67,6 +67,15 @@ export async function getIssue(issueKey, fields, { asUser = false } = {}) {
   return res.json();
 }
 
+export async function addComment(issueKey, body) {
+  const res = await api.asApp().requestJira(route`/rest/api/3/issue/${issueKey}/comment`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ body }),
+  });
+  if (!res.ok) throw await failedRequest(`Comment on ${issueKey}`, res);
+}
+
 async function fetchVisibleKeys(issueKeys) {
   const res = await api.asUser().requestJira(route`/rest/api/3/issue/bulkfetch`, {
     method: 'POST',

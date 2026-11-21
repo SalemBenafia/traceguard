@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from '@forge/sql';
+import { gapMessage, groupKeysByProject } from '../engine/gapComment';
 import { batchByBytes, chunk, diffGaps, gapEventId, sortByKeyNumber } from '../engine/gapDiff';
 import { ensureMigrations } from './migrations';
 
@@ -7,6 +8,7 @@ const MAX_ROWS_PER_WRITE = 50;
 const MAX_BYTES_PER_WRITE = 512 * 1024; // Forge SQL requests are limited to 1 MiB.
 const MAX_KEYS_PER_STATEMENT = 200;
 const MAX_HISTORY_ROWS = 100;
+const MAX_PENDING_COMMENT_ROWS = 200;
 const UNRECORDED_SOURCES = new Set(['panel']);
 
 const REQUIREMENT_COLUMN_COUNT = 11;
@@ -109,6 +111,14 @@ async function openGapEvents(projectKey, toOpen, openedAt) {
   ]);
 
   for (const batch of chunk(rows, MAX_ROWS_PER_WRITE)) {
+    // Queued first: a retry reuses the same id, so a new gap cannot lose its comment.
+    await execute(
+      'queue gap comments',
+      `INSERT INTO tg_pending_gap_comments (event_id, project_key, req_key, gap_code, queued_at)
+       VALUES ${rowPlaceholders(batch.length, GAP_EVENT_COLUMN_COUNT)}
+       ON DUPLICATE KEY UPDATE event_id = event_id`,
+      batch.flat(),
+    );
     await execute(
       'open gap events',
       `INSERT INTO tg_gap_events (id, project_key, req_key, gap_code, opened_at)
@@ -126,6 +136,12 @@ async function closeGapEvents(projectKey, eventIds, closedAt) {
       `UPDATE tg_gap_events SET closed_at = ?
        WHERE project_key = ? AND closed_at IS NULL AND id IN (${placeholders(batch.length)})`,
       [closedAt, projectKey, ...batch],
+    );
+    await execute(
+      'remove queued gap comments',
+      `DELETE FROM tg_pending_gap_comments
+       WHERE project_key = ? AND event_id IN (${placeholders(batch.length)})`,
+      [projectKey, ...batch],
     );
   }
 }
@@ -228,14 +244,8 @@ export async function getRequirement(projectKey, reqKey) {
 export async function getStoredRequirements(keys) {
   await ensureMigrations();
 
-  const keysByProject = new Map();
-  for (const key of new Set(keys)) {
-    const projectKey = key.slice(0, key.lastIndexOf('-'));
-    keysByProject.set(projectKey, [...(keysByProject.get(projectKey) ?? []), key]);
-  }
-
   const found = [];
-  for (const [projectKey, projectKeys] of keysByProject) {
+  for (const [projectKey, projectKeys] of groupKeysByProject(keys)) {
     for (const batch of chunk(projectKeys, MAX_KEYS_PER_STATEMENT)) {
       const { rows } = await execute(
         'load linked requirements',
@@ -266,6 +276,84 @@ export async function getLatestScanRun(projectKey) {
   const [latest] = await getHistory(projectKey, 1);
   return latest ?? null;
 }
+
+// New gaps still waiting for a comment, skipping any that have since closed.
+export async function getPendingGapComments(projectKey) {
+  await ensureMigrations();
+  const { rows } = await execute(
+    'load queued gap comments',
+    `SELECT p.event_id, p.req_key, p.gap_code, r.owner_account_id, r.owner_name, r.gaps_json
+     FROM tg_pending_gap_comments p
+     JOIN tg_gap_events e ON e.id = p.event_id
+     JOIN tg_requirements r ON r.project_key = p.project_key AND r.req_key = p.req_key
+     WHERE p.project_key = ? AND e.closed_at IS NULL
+     ORDER BY p.queued_at, p.event_id LIMIT ${MAX_PENDING_COMMENT_ROWS}`,
+    [projectKey],
+  );
+  return sortByKeyNumber(rows).map((row) => ({
+    eventId: row.event_id,
+    reqKey: row.req_key,
+    gapCode: row.gap_code,
+    ownerAccountId: row.owner_account_id,
+    ownerName: row.owner_name,
+    message: gapMessage(JSON.parse(row.gaps_json), row.gap_code),
+  }));
+}
+
+// Removing the row first means only one job can ever post this comment.
+export async function claimPendingComment(eventId) {
+  const { rows } = await execute(
+    'claim a gap comment',
+    'DELETE FROM tg_pending_gap_comments WHERE event_id = ?',
+    [eventId],
+  );
+  return rows.affectedRows === 1;
+}
+
+export const releasePendingComment = (projectKey, { eventId, reqKey, gapCode }) =>
+  execute(
+    'return a gap comment to the queue',
+    `INSERT INTO tg_pending_gap_comments (event_id, project_key, req_key, gap_code, queued_at)
+     VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE event_id = event_id`,
+    [eventId, projectKey, reqKey, gapCode, toSqlDate()],
+  );
+
+export const clearPendingComments = (projectKey) =>
+  execute('clear queued gap comments', 'DELETE FROM tg_pending_gap_comments WHERE project_key = ?', [
+    projectKey,
+  ]);
+
+export async function removeOldCommentSlots(today) {
+  await ensureMigrations();
+  await execute('remove old comment limits', 'DELETE FROM tg_comment_slots WHERE comment_day < ?', [today]);
+}
+
+// Inserting a free slot is atomic, so overlapping jobs cannot exceed the daily limit.
+export async function reserveCommentSlot(day, maxPerDay) {
+  const { rows } = await execute(
+    'read the comment limit',
+    'SELECT slot FROM tg_comment_slots WHERE comment_day = ?',
+    [day],
+  );
+  const usedSlots = new Set(rows.map((row) => Number(row.slot)));
+
+  for (let slot = 1; slot <= maxPerDay; slot += 1) {
+    if (usedSlots.has(slot)) continue;
+    const { rows: result } = await execute(
+      'reserve a comment',
+      'INSERT IGNORE INTO tg_comment_slots (comment_day, slot) VALUES (?, ?)',
+      [day, slot],
+    );
+    if (result.affectedRows === 1) return slot;
+  }
+  return null;
+}
+
+export const releaseCommentSlot = (day, slot) =>
+  execute('release a comment', 'DELETE FROM tg_comment_slots WHERE comment_day = ? AND slot = ?', [
+    day,
+    slot,
+  ]);
 
 export async function getOpenGaps(projectKey) {
   await ensureMigrations();

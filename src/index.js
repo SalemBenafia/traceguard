@@ -4,6 +4,7 @@ import { RequirementJqlError } from './engine/jql';
 import { filterForViewer, filterGapsForViewer, referencedIssueKeys } from './engine/visibility';
 import { getIssueTrace } from './issueTrace';
 import { hasProjectPermission, visibleIssueKeys } from './jira/client';
+import { runNightly } from './nightly';
 import { scanProject } from './scanner';
 import { getSettings, saveSettings, SettingsValidationError } from './settings';
 
@@ -11,6 +12,8 @@ const resolver = new Resolver();
 
 // Forge stops UI-invoked functions at 25 seconds. This leaves time to save the scan.
 const RESCAN_TIME_BUDGET_MS = 15_000;
+const NIGHTLY_NOW_SCAN_BUDGET_MS = 10_000;
+const NIGHTLY_NOW_DEADLINE_MS = 20_000;
 
 const failure = (error) => ({ ok: false, error });
 const projectKeyFrom = (context) => context.extension?.project?.key;
@@ -49,7 +52,28 @@ resolver.define('getSettings', async ({ context }) => {
   if (!(await hasProjectPermission(projectKey, 'BROWSE_PROJECTS'))) {
     return failure('You need access to this project to view its TraceGuard settings.');
   }
-  return { ok: true, settings: await getSettings(projectKey) };
+  return {
+    ok: true,
+    settings: await getSettings(projectKey),
+    // Only controls the button. runNightlyNow checks this permission again.
+    canRunNightly: await hasProjectPermission(projectKey, 'ADMINISTER_PROJECTS').catch(() => false),
+  };
+});
+
+resolver.define('runNightlyNow', async ({ context }) => {
+  const projectKey = projectKeyFrom(context);
+  if (!projectKey) return failure(NO_PROJECT_ERROR);
+
+  if (!(await hasProjectPermission(projectKey, 'ADMINISTER_PROJECTS'))) {
+    return failure('Only project admins can run the nightly job.');
+  }
+
+  const { failures, ...summary } = await runNightly({
+    projectKeys: [projectKey],
+    scanBudgetMs: NIGHTLY_NOW_SCAN_BUDGET_MS,
+    deadlineAt: Date.now() + NIGHTLY_NOW_DEADLINE_MS,
+  });
+  return failures.length > 0 ? failure(failures[0].message) : { ok: true, ...summary };
 });
 
 resolver.define('saveSettings', async ({ payload, context }) => {

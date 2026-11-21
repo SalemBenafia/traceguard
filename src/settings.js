@@ -1,12 +1,14 @@
-import { kvs } from '@forge/kvs';
+import { kvs, WhereConditions } from '@forge/kvs';
 
+const SETTINGS_PREFIX = 'settings:';
+const SETTINGS_PAGE_SIZE = 20;
 const MAX_JQL_LENGTH = 1000;
 const LIST_FIELDS = ['implementationTypes', 'testTypes', 'passedStatuses', 'failedStatuses'];
 
 // Marks errors whose message is safe and useful to show to the user.
 export class SettingsValidationError extends Error {}
 
-const settingsKey = (projectKey) => `settings:${projectKey}`;
+const settingsKey = (projectKey) => `${SETTINGS_PREFIX}${projectKey}`;
 
 export const defaultSettings = (projectKey) => ({
   requirementJql: `project = ${projectKey} AND issuetype = Requirement`,
@@ -88,6 +90,30 @@ export async function getSettings(projectKey) {
   } catch (error) {
     throw storageError('load', projectKey, error);
   }
+}
+
+// Returns null for a project whose admin has never saved settings.
+export async function getSavedSettings(projectKey) {
+  try {
+    const saved = await kvs.get(settingsKey(projectKey));
+    return saved ? { ...defaultSettings(projectKey), ...saved } : null;
+  } catch (error) {
+    throw storageError('load', projectKey, error);
+  }
+}
+
+export async function listProjectsWithSettings() {
+  const projectKeys = [];
+  let cursor;
+  do {
+    let query = kvs.query().where('key', WhereConditions.beginsWith(SETTINGS_PREFIX)).limit(SETTINGS_PAGE_SIZE);
+    if (cursor) query = query.cursor(cursor);
+
+    const page = await query.getMany();
+    projectKeys.push(...page.results.map(({ key }) => key.slice(SETTINGS_PREFIX.length)));
+    cursor = page.nextCursor;
+  } while (cursor);
+  return projectKeys;
 }
 
 export async function saveSettings(projectKey, input) {
