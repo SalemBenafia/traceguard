@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import ForgeReconciler, {
   Box,
+  CodeBlock,
   Form,
   FormFooter,
   HelperMessage,
@@ -143,6 +144,58 @@ const SettingsTab = () => {
   );
 };
 
+const ScanResult = ({ result }) => (
+  <Stack space="space.100">
+    {result.warnings.map((warning) => (
+      <StatusMessage key={warning} message={{ appearance: 'warning', text: warning }} />
+    ))}
+    <Text>
+      Total: {result.totals.total} | Green: {result.totals.green} | Amber: {result.totals.amber} | Red:{' '}
+      {result.totals.red}
+    </Text>
+    <Text>First 3 requirements:</Text>
+    <CodeBlock language="json" text={JSON.stringify(result.requirements.slice(0, 3), null, 2)} />
+  </Stack>
+);
+
+// Temporary view for testing the scanner.
+const OverviewTab = () => {
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+  const [isScanning, setIsScanning] = useState(false);
+
+  const rescan = async () => {
+    setIsScanning(true);
+    setError(null);
+    try {
+      const response = await invoke('rescan');
+      if (response.ok) {
+        setResult(response.result);
+      } else {
+        setResult(null);
+        setError(response.error);
+      }
+    } catch {
+      setResult(null);
+      setError('Could not run the scan. Please try again.');
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  return (
+    <Stack space="space.200">
+      <Box>
+        <LoadingButton appearance="primary" isLoading={isScanning} onClick={rescan}>
+          Rescan
+        </LoadingButton>
+      </Box>
+      {error && <StatusMessage message={errorMessage(error)} />}
+      {result && <ScanResult result={result} />}
+    </Stack>
+  );
+};
+
 const PlaceholderPanel = ({ name }) => (
   <Box xcss={panelStyle}>
     <Text>{name} - coming soon</Text>
@@ -159,7 +212,9 @@ const ProjectPage = () => (
       <Tab>Settings</Tab>
     </TabList>
     <TabPanel>
-      <PlaceholderPanel name="Overview" />
+      <Box xcss={panelStyle}>
+        <OverviewTab />
+      </Box>
     </TabPanel>
     <TabPanel>
       <PlaceholderPanel name="Matrix" />
