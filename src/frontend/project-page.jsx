@@ -149,12 +149,14 @@ const ScanResult = ({ result }) => (
     {result.warnings.map((warning) => (
       <StatusMessage key={warning} message={{ appearance: 'warning', text: warning }} />
     ))}
-    <Text>
-      Total: {result.totals.total} | Green: {result.totals.green} | Amber: {result.totals.amber} | Red:{' '}
-      {result.totals.red}
-    </Text>
+    {result.latestRun && (
+      <Text>
+        Total: {result.latestRun.total} | Green: {result.latestRun.green} | Amber: {result.latestRun.amber} | Red:{' '}
+        {result.latestRun.red}
+      </Text>
+    )}
     <Text>First 3 requirements:</Text>
-    <CodeBlock language="json" text={JSON.stringify(result.requirements.slice(0, 3), null, 2)} />
+    <CodeBlock language="json" text={JSON.stringify(result.matrix.slice(0, 3), null, 2)} />
   </Stack>
 );
 
@@ -170,7 +172,7 @@ const OverviewTab = () => {
     try {
       const response = await invoke('rescan');
       if (response.ok) {
-        setResult(response.result);
+        setResult(response);
       } else {
         setResult(null);
         setError(response.error);

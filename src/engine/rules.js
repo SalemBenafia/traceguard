@@ -6,9 +6,10 @@
 
 const latestPassTime = (passedTests) => Math.max(0, ...passedTests.map((test) => test.passedAt || 0));
 
+// A pass with no known time cannot prove the test ran after the latest change.
 function isStale(requirement, passedTests) {
-  const lastPass = latestPassTime(passedTests);
-  return lastPass > 0 && Boolean(requirement.contentChangedAt) && requirement.contentChangedAt > lastPass;
+  if (passedTests.length === 0 || !requirement.contentChangedAt) return false;
+  return requirement.contentChangedAt > latestPassTime(passedTests);
 }
 
 function ragFor(gaps) {
@@ -21,6 +22,7 @@ export function evaluate(requirement, links, settings) {
   const tests = links.filter((link) => settings.testTypes.includes(link.type));
   const passed = tests.filter((test) => settings.passedStatuses.includes(test.status));
   const failed = tests.filter((test) => settings.failedStatuses.includes(test.status));
+  const notRun = tests.filter((test) => !passed.includes(test) && !failed.includes(test));
 
   const gaps = [];
   const add = (code, severity, message) => gaps.push({ code, severity, message });
@@ -28,9 +30,7 @@ export function evaluate(requirement, links, settings) {
   if (implementation.length === 0) add('NO_IMPLEMENTATION', 'red', 'No linked story, task or bug.');
   if (tests.length === 0) add('NO_TEST', 'red', 'No linked test.');
   if (failed.length > 0) add('TEST_FAILED', 'red', `${failed.length} linked test(s) failed.`);
-  if (tests.length > 0 && passed.length === 0 && failed.length === 0) {
-    add('TEST_NOT_RUN', 'amber', 'Tests exist but none has run yet.');
-  }
+  if (notRun.length > 0) add('TEST_NOT_RUN', 'amber', `${notRun.length} linked test(s) have not run.`);
   if (isStale(requirement, passed)) {
     add('STALE_VERIFICATION', 'red', 'Requirement changed after its last passing test.');
   }

@@ -1,6 +1,10 @@
 import api, { route } from '@forge/api';
+import { mapWithLimit } from '../engine/concurrency';
+import { chunk } from '../engine/gapDiff';
 
 const JSON_HEADERS = { Accept: 'application/json', 'Content-Type': 'application/json' };
+const VISIBILITY_BATCH_SIZE = 100;
+const VISIBILITY_PARALLEL_BATCHES = 5;
 
 // Carries the HTTP status so callers can react to specific Jira failures.
 export class JiraApiError extends Error {
@@ -52,6 +56,25 @@ export async function getChangelog(issueKey, { asUser = false } = {}) {
     if (data.isLast || data.values.length === 0) return items;
     startAt += data.values.length;
   }
+}
+
+async function fetchVisibleKeys(issueKeys) {
+  const res = await api.asUser().requestJira(route`/rest/api/3/issue/bulkfetch`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ issueIdsOrKeys: issueKeys, fields: ['issuetype'] }),
+  });
+  if (!res.ok) throw await failedRequest('Issue visibility check', res);
+
+  const data = await res.json();
+  return (data.issues ?? []).map((issue) => issue.key);
+}
+
+// Jira leaves out issues the signed-in user is not allowed to see.
+export async function visibleIssueKeys(issueKeys) {
+  const batches = chunk([...new Set(issueKeys)], VISIBILITY_BATCH_SIZE);
+  const visible = await mapWithLimit(batches, VISIBILITY_PARALLEL_BATCHES, fetchVisibleKeys);
+  return new Set(visible.flat());
 }
 
 // Runs as the signed-in user, so Jira answers for that user's own access.

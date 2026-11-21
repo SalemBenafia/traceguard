@@ -1,3 +1,5 @@
+import { ensureMigrations } from './db/migrations';
+import { saveScan } from './db/repo';
 import { buildChain } from './engine/chain';
 import { latestContentChange, latestMoveToStatus } from './engine/changelog';
 import { mapWithLimit } from './engine/concurrency';
@@ -40,7 +42,15 @@ async function scanIssue(issue, settings, readChangelog) {
   const requirement = { ...chain.requirement, contentChangedAt };
   const { rag, gaps, counts } = evaluate(requirement, chain.links, settings);
 
-  return { ...requirement, rag, gaps, counts, links: chain.links };
+  return {
+    ...requirement,
+    status: issue.fields.status?.name ?? null,
+    ownerName: issue.fields.assignee?.displayName ?? null,
+    rag,
+    gaps,
+    counts,
+    links: chain.links,
+  };
 }
 
 async function findRequirements(jql, asUser) {
@@ -65,6 +75,7 @@ async function runScan(projectKey, keys, { asUser = false, source = 'unknown', t
   const startedAt = Date.now();
   const outOfTime = () => timeBudgetMs !== null && Date.now() - startedAt >= timeBudgetMs;
   console.log(`[TG] Scan started for ${projectKey} (source: ${source})`);
+  await ensureMigrations();
 
   const settings = await getSettings(projectKey);
   const found = await findRequirements(requirementJql(projectKey, settings.requirementJql, keys), asUser);
@@ -87,14 +98,20 @@ async function runScan(projectKey, keys, { asUser = false, source = 'unknown', t
     );
   }
 
-  console.log(`[TG] Scan finished for ${projectKey}: ${requirements.length} requirements`);
-  return {
+  const result = {
     projectKey,
+    startedAt: new Date(startedAt).toISOString(),
     scannedAt: new Date().toISOString(),
+    // Only a complete project scan may remove saved requirements.
+    complete: keys === null && found.length <= MAX_REQUIREMENTS && requirements.length === issues.length,
     totals: countByRag(requirements),
     requirements,
     warnings,
   };
+
+  const { runId, warnings: saveWarnings } = await saveScan(projectKey, result, source);
+  console.log(`[TG] Scan saved for ${projectKey}: ${requirements.length} requirements (run ${runId})`);
+  return { ...result, runId, warnings: [...warnings, ...saveWarnings] };
 }
 
 export const scanProject = (projectKey, options) => runScan(projectKey, null, options);

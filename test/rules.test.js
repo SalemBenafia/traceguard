@@ -162,6 +162,23 @@ describe('evaluate: STALE_VERIFICATION', () => {
 
     assert.deepEqual(result, ['TEST_FAILED']);
   });
+
+  test('is raised when a changed requirement only has a pass with no known time', () => {
+    assert.deepEqual(staleResult({}, [testLink({ passedAt: null })]), ['STALE_VERIFICATION']);
+  });
+
+  test('a known pass after the change clears a pass with no known time', () => {
+    const tests = [
+      testLink({ key: 'SPF-22', passedAt: null }),
+      testLink({ key: 'SPF-23', passedAt: AFTER_CHANGE }),
+    ];
+
+    assert.deepEqual(staleResult({}, tests), []);
+  });
+
+  test('a pass with no known time is fine when the requirement never changed', () => {
+    assert.deepEqual(staleResult({ contentChangedAt: null }, [testLink({ passedAt: null })]), []);
+  });
 });
 
 describe('evaluate: custom settings', () => {
@@ -218,6 +235,23 @@ describe('evaluate: several tests', () => {
     const result = evaluate(requirement(), links, SETTINGS);
 
     assert.match(result.gaps[0].message, /2 linked test/);
+  });
+
+  test('one passed and one not-run test raises TEST_NOT_RUN', () => {
+    const links = [storyLink(), testLink({ key: 'SPF-22' }), notRunTest({ key: 'SPF-23' })];
+    const result = evaluate(requirement(), links, SETTINGS);
+
+    assert.deepEqual(gapCodes(result), ['TEST_NOT_RUN']);
+    assert.equal(result.rag, 'amber');
+    assert.match(result.gaps[0].message, /1 linked test/);
+  });
+
+  test('one failed and one not-run test raises both gaps', () => {
+    const links = [storyLink(), failedTest({ key: 'SPF-22' }), notRunTest({ key: 'SPF-23' })];
+    const result = evaluate(requirement(), links, SETTINGS);
+
+    assert.deepEqual(gapCodes(result), ['TEST_FAILED', 'TEST_NOT_RUN']);
+    assert.equal(result.rag, 'red');
   });
 });
 
