@@ -58,6 +58,15 @@ export async function getChangelog(issueKey, { asUser = false } = {}) {
   }
 }
 
+export async function getIssue(issueKey, fields, { asUser = false } = {}) {
+  const res = await requester(asUser).requestJira(
+    route`/rest/api/3/issue/${issueKey}?fields=${fields.join(',')}`,
+    { headers: { Accept: 'application/json' } },
+  );
+  if (!res.ok) throw await failedRequest(`Reading ${issueKey}`, res);
+  return res.json();
+}
+
 async function fetchVisibleKeys(issueKeys) {
   const res = await api.asUser().requestJira(route`/rest/api/3/issue/bulkfetch`, {
     method: 'POST',

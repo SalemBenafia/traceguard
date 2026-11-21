@@ -2,6 +2,7 @@ import Resolver from '@forge/resolver';
 import { getHistory, getMatrix, getOpenGaps } from './db/repo';
 import { RequirementJqlError } from './engine/jql';
 import { filterForViewer, filterGapsForViewer, referencedIssueKeys } from './engine/visibility';
+import { getIssueTrace } from './issueTrace';
 import { hasProjectPermission, visibleIssueKeys } from './jira/client';
 import { scanProject } from './scanner';
 import { getSettings, saveSettings, SettingsValidationError } from './settings';
@@ -117,6 +118,23 @@ resolver.define('getHistory', async ({ context }) => {
     return failure('You need access to this project to view its scan history.');
   }
   return { ok: true, history: await getHistory(projectKey) };
+});
+
+resolver.define('getIssueTrace', async ({ context }) => {
+  const projectKey = projectKeyFrom(context);
+  const issueKey = context.extension?.issue?.key;
+  if (!projectKey || !issueKey) return failure('TraceGuard could not find this work item.');
+
+  if (!(await hasProjectPermission(projectKey, 'BROWSE_PROJECTS'))) {
+    return failure('You need access to this project to view traceability.');
+  }
+
+  try {
+    return { ok: true, ...(await getIssueTrace(projectKey, issueKey)) };
+  } catch (error) {
+    if (error instanceof RequirementJqlError) return failure(error.message);
+    throw error;
+  }
 });
 
 export const handler = resolver.getDefinitions();

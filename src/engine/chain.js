@@ -11,6 +11,7 @@ function toLink(linkedIssue, testPassTimes, settings) {
 
   return {
     key,
+    summary: fields.summary ?? null,
     type,
     status,
     statusCategory: fields.status?.statusCategory?.key ?? null,

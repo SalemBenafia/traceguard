@@ -4,6 +4,7 @@ import { buildChain } from './engine/chain';
 import { latestContentChange, latestMoveToStatus } from './engine/changelog';
 import { mapWithLimit } from './engine/concurrency';
 import { requirementJql, RequirementJqlError } from './engine/jql';
+import { sameLinkedIssues } from './engine/issueTrace';
 import { evaluate } from './engine/rules';
 import { getChangelog, searchAll } from './jira/client';
 import { getSettings } from './settings';
@@ -11,6 +12,8 @@ import { getSettings } from './settings';
 const MAX_REQUIREMENTS = 500;
 const MAX_PARALLEL_REQUIREMENTS = 5;
 const SEARCH_FIELDS = ['summary', 'status', 'assignee', 'issuelinks', 'issuetype', 'updated'];
+const LIMITED_VIEW_WARNING =
+  'You cannot see every linked work item, so this result may be incomplete and was not saved.';
 
 // A test linked to several requirements only has its changelog read once per scan.
 function createChangelogReader(asUser) {
@@ -65,6 +68,12 @@ async function findRequirements(jql, asUser) {
   }
 }
 
+// Saved results are shared, so a user's scan is only saved if it matches the app's view.
+async function appSeesSameLinks(jql, userIssues) {
+  const appIssues = await searchAll(jql, ['issuelinks'], { asUser: false, max: MAX_REQUIREMENTS + 1 });
+  return sameLinkedIssues(userIssues, appIssues);
+}
+
 function countByRag(requirements) {
   const totals = { total: requirements.length, green: 0, amber: 0, red: 0 };
   for (const { rag } of requirements) totals[rag] += 1;
@@ -78,7 +87,8 @@ async function runScan(projectKey, keys, { asUser = false, source = 'unknown', t
   await ensureMigrations();
 
   const settings = await getSettings(projectKey);
-  const found = await findRequirements(requirementJql(projectKey, settings.requirementJql, keys), asUser);
+  const jql = requirementJql(projectKey, settings.requirementJql, keys);
+  const found = await findRequirements(jql, asUser);
   const issues = found.slice(0, MAX_REQUIREMENTS);
   const readChangelog = createChangelogReader(asUser);
   const requirements = await mapWithLimit(
@@ -109,12 +119,22 @@ async function runScan(projectKey, keys, { asUser = false, source = 'unknown', t
     warnings,
   };
 
+  if (asUser && !(await appSeesSameLinks(jql, found))) {
+    console.log(`[TG] Scan for ${projectKey} not saved: the user sees different links than the app`);
+    return { ...result, saved: false, warnings: [...warnings, LIMITED_VIEW_WARNING] };
+  }
+
   const { runId, warnings: saveWarnings } = await saveScan(projectKey, result, source);
   console.log(`[TG] Scan saved for ${projectKey}: ${requirements.length} requirements (run ${runId})`);
-  return { ...result, runId, warnings: [...warnings, ...saveWarnings] };
+  return { ...result, saved: true, runId, warnings: [...warnings, ...saveWarnings] };
 }
 
 export const scanProject = (projectKey, options) => runScan(projectKey, null, options);
+
+export async function isRequirement(projectKey, issueKey, settings) {
+  const jql = requirementJql(projectKey, settings.requirementJql, [issueKey]);
+  return (await findRequirements(jql, true)).length > 0;
+}
 
 const projectKeyOf = (issueKey) => issueKey.slice(0, issueKey.lastIndexOf('-'));
 

@@ -73,6 +73,7 @@ describe('buildChain: links', () => {
 
     assert.deepEqual(linkByKey(chain, 'SPF-28'), {
       key: 'SPF-28',
+      summary: 'Verify: Firmware updates are signature-verified',
       type: 'Test',
       status: 'Passed',
       statusCategory: 'done',
@@ -99,7 +100,7 @@ describe('buildChain: links', () => {
     issue.fields.issuelinks = [{ outwardIssue: { key: 'SPF-99', fields: { issuetype: { name: 'Story' } } } }];
 
     assert.deepEqual(buildChain(issue, {}, SETTINGS).links, [
-      { key: 'SPF-99', type: 'Story', status: null, statusCategory: null, passedAt: null },
+      { key: 'SPF-99', summary: null, type: 'Story', status: null, statusCategory: null, passedAt: null },
     ]);
   });
 });

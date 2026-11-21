@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Box, DynamicTable, Label, Link, Lozenge, Select, Stack, xcss } from '@forge/react';
+import { Box, DynamicTable, Label, Link, Select, Stack, xcss } from '@forge/react';
 import { filterByRag, implementationLabel, sortByRag, testsLabel } from '../../engine/dashboard.js';
+import { RagLozenge } from './RagLozenge';
 
-const RAG_APPEARANCE = { green: 'success', amber: 'moved', red: 'removed' };
 const FILTER_ID = 'tg-matrix-filter';
 const ROWS_PER_PAGE = 20;
 
@@ -37,7 +37,7 @@ const toTableRow = (row) => ({
     { key: 'team', content: row.owner_team ?? '-' },
     { key: 'implementation', content: implementationLabel(row.chain?.counts) },
     { key: 'tests', content: testsLabel(row.chain?.counts) },
-    { key: 'status', content: <Lozenge appearance={RAG_APPEARANCE[row.rag]}>{row.rag}</Lozenge> },
+    { key: 'status', content: <RagLozenge rag={row.rag} /> },
     { key: 'gaps', content: row.gaps.map((gap) => gap.code).join(', ') || '-' },
   ],
 });

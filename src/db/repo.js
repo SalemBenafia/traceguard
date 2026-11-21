@@ -7,6 +7,7 @@ const MAX_ROWS_PER_WRITE = 50;
 const MAX_BYTES_PER_WRITE = 512 * 1024; // Forge SQL requests are limited to 1 MiB.
 const MAX_KEYS_PER_STATEMENT = 200;
 const MAX_HISTORY_ROWS = 100;
+const UNRECORDED_SOURCES = new Set(['panel']);
 
 const REQUIREMENT_COLUMN_COUNT = 11;
 const GAP_EVENT_COLUMN_COUNT = 5;
@@ -181,9 +182,11 @@ const finishScanRun = (runId, finishedAt, totals) =>
 export async function saveScan(projectKey, scanResult, source) {
   await ensureMigrations();
 
-  const runId = randomUUID();
+  // Opening a work item is not a project scan, so it stays out of the scan history.
+  const recordRun = !UNRECORDED_SOURCES.has(source);
+  const runId = recordRun ? randomUUID() : null;
   const scannedAt = toSqlDate(new Date(scanResult.scannedAt));
-  await insertScanRun(runId, projectKey, source, toSqlDate(new Date(scanResult.startedAt)));
+  if (recordRun) await insertScanRun(runId, projectKey, source, toSqlDate(new Date(scanResult.startedAt)));
 
   const savedKeys = await readSavedKeys(projectKey);
   const { removedKeys, warnings } = findRemovedKeys(scanResult, savedKeys);
@@ -191,7 +194,7 @@ export async function saveScan(projectKey, scanResult, source) {
   await upsertRequirements(projectKey, scanResult.requirements, scannedAt);
   await applyGapChanges(projectKey, scanResult.requirements, removedKeys, scannedAt);
   await deleteRequirements(projectKey, removedKeys);
-  await finishScanRun(runId, toSqlDate(), await countSavedByRag(projectKey));
+  if (recordRun) await finishScanRun(runId, toSqlDate(), await countSavedByRag(projectKey));
 
   return { runId, warnings };
 }
@@ -219,6 +222,31 @@ export async function getRequirement(projectKey, reqKey) {
     [projectKey, reqKey],
   );
   return rows.length > 0 ? toRequirement(rows[0]) : null;
+}
+
+// Looks up saved requirements by key. Linked requirements can be in other projects.
+export async function getStoredRequirements(keys) {
+  await ensureMigrations();
+
+  const keysByProject = new Map();
+  for (const key of new Set(keys)) {
+    const projectKey = key.slice(0, key.lastIndexOf('-'));
+    keysByProject.set(projectKey, [...(keysByProject.get(projectKey) ?? []), key]);
+  }
+
+  const found = [];
+  for (const [projectKey, projectKeys] of keysByProject) {
+    for (const batch of chunk(projectKeys, MAX_KEYS_PER_STATEMENT)) {
+      const { rows } = await execute(
+        'load linked requirements',
+        `SELECT req_key, summary, rag FROM tg_requirements
+         WHERE project_key = ? AND req_key IN (${placeholders(batch.length)})`,
+        [projectKey, ...batch],
+      );
+      found.push(...rows);
+    }
+  }
+  return sortByKeyNumber(found);
 }
 
 export async function getHistory(projectKey, limit = 30) {
