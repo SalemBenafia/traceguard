@@ -1,0 +1,20 @@
+modules:
+  jira:projectPage:
+    - key: traceguard-hello-world-project-page
+      resource: main
+      resolver:
+        function: resolver
+      render: native
+      title: traceguard
+  function:
+    - key: resolver
+      handler: index.handler
+resources:
+  - key: main
+    path: src/frontend/index.jsx
+app:
+  runtime:
+    name: nodejs24.x
+    memoryMB: 256
+    architecture: arm64
+  id: ari:cloud:ecosystem::app/fffe38dc-4926-4105-b596-2cd08d1e0369
