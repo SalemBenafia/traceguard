@@ -86,6 +86,16 @@ async function readSavedKeys(projectKey) {
   return rows.map((row) => row.req_key);
 }
 
+export async function getSavedOwners(projectKey) {
+  await ensureMigrations();
+  const { rows } = await execute(
+    'read saved owners',
+    'SELECT req_key, owner_account_id, owner_team FROM tg_requirements WHERE project_key = ?',
+    [projectKey],
+  );
+  return new Map(rows.map((row) => [row.req_key, row]));
+}
+
 // Only a complete scan with results can prove that a requirement is gone.
 function findRemovedKeys(scanResult, savedKeys) {
   if (!scanResult.complete) return { removedKeys: [], warnings: [] };
@@ -249,7 +259,7 @@ export async function getStoredRequirements(keys) {
     for (const batch of chunk(projectKeys, MAX_KEYS_PER_STATEMENT)) {
       const { rows } = await execute(
         'load linked requirements',
-        `SELECT req_key, summary, rag FROM tg_requirements
+        `SELECT req_key, summary, rag, owner_team FROM tg_requirements
          WHERE project_key = ? AND req_key IN (${placeholders(batch.length)})`,
         [projectKey, ...batch],
       );

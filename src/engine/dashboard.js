@@ -1,4 +1,7 @@
 // Pure helpers that shape saved scan data for the dashboard.
+import { NO_TEAM } from './teams.js';
+
+export const ALL_TEAMS = '__all_teams__';
 
 const RAG_ORDER = { red: 0, amber: 1, green: 2 };
 
@@ -26,6 +29,21 @@ export function sortByRag(rows) {
 }
 
 export const filterByRag = (rows, rag) => (rag === 'all' ? rows : rows.filter((row) => row.rag === rag));
+
+export const teamLabel = (row) => row.owner_team ?? NO_TEAM;
+
+export const filterByTeam = (rows, team) =>
+  team === ALL_TEAMS ? rows : rows.filter((row) => teamLabel(row) === team);
+
+// Named teams come first, alphabetically, with "No team found" last.
+export function teamFilterOptions(rows) {
+  const names = [...new Set(rows.map(teamLabel))].sort((a, b) => a.localeCompare(b));
+  const ordered = [...names.filter((name) => name !== NO_TEAM), ...names.filter((name) => name === NO_TEAM)];
+  return [
+    { label: 'All teams', value: ALL_TEAMS },
+    ...ordered.map((name) => ({ label: name, value: name })),
+  ];
+}
 
 export function ragTotals(rows) {
   const totals = { total: rows.length, green: 0, amber: 0, red: 0 };

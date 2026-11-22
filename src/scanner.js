@@ -1,5 +1,5 @@
 import { ensureMigrations } from './db/migrations';
-import { saveScan } from './db/repo';
+import { getSavedOwners, saveScan } from './db/repo';
 import { buildChain } from './engine/chain';
 import { latestContentChange, latestMoveToStatus } from './engine/changelog';
 import { mapWithLimit } from './engine/concurrency';
@@ -7,6 +7,8 @@ import { requirementJql, RequirementJqlError } from './engine/jql';
 import { groupKeysByProject } from './engine/gapComment';
 import { linkedIssueKeys, sameLinkedIssues } from './engine/issueTrace';
 import { evaluate } from './engine/rules';
+import { resolveOwnerTeam } from './engine/teams';
+import { createTeamLookup } from './graph/teams';
 import { getChangelog, getIssue, searchAll } from './jira/client';
 import { getSavedSettings, getSettings } from './settings';
 
@@ -37,7 +39,7 @@ async function readPassTimes(links, settings, readChangelog) {
   return passTimes;
 }
 
-async function scanIssue(issue, settings, readChangelog) {
+async function scanIssue(issue, { settings, readChangelog, teamFor, savedOwners }) {
   const contentChangedAt = latestContentChange(await readChangelog(issue.key));
   const { links: linksWithoutTimes } = buildChain(issue, new Map(), settings);
   const passTimes = await readPassTimes(linksWithoutTimes, settings, readChangelog);
@@ -50,6 +52,11 @@ async function scanIssue(issue, settings, readChangelog) {
     ...requirement,
     status: issue.fields.status?.name ?? null,
     ownerName: issue.fields.assignee?.displayName ?? null,
+    ownerTeam: resolveOwnerTeam({
+      ownerAccountId: requirement.assigneeAccountId,
+      lookedUpTeam: await teamFor(requirement.assigneeAccountId),
+      saved: savedOwners.get(issue.key),
+    }),
     rag,
     gaps,
     counts,
@@ -81,7 +88,12 @@ function countByRag(requirements) {
   return totals;
 }
 
-async function runScan(projectKey, keys, { asUser = false, source = 'unknown', timeBudgetMs = null } = {}) {
+// graphAsUser is only for scans started by a person: background jobs have no user for Teamwork Graph.
+async function runScan(
+  projectKey,
+  keys,
+  { asUser = false, source = 'unknown', timeBudgetMs = null, graphAsUser = asUser } = {},
+) {
   const startedAt = Date.now();
   const outOfTime = () => timeBudgetMs !== null && Date.now() - startedAt >= timeBudgetMs;
   console.log(`[TG] Scan started for ${projectKey} (source: ${source})`);
@@ -91,11 +103,16 @@ async function runScan(projectKey, keys, { asUser = false, source = 'unknown', t
   const jql = requirementJql(projectKey, settings.requirementJql, keys);
   const found = await findRequirements(jql, asUser);
   const issues = found.slice(0, MAX_REQUIREMENTS);
-  const readChangelog = createChangelogReader(asUser);
+  const scanContext = {
+    settings,
+    readChangelog: createChangelogReader(asUser),
+    teamFor: createTeamLookup({ canCallGraph: graphAsUser }),
+    savedOwners: await getSavedOwners(projectKey),
+  };
   const requirements = await mapWithLimit(
     issues,
     MAX_PARALLEL_REQUIREMENTS,
-    (issue) => scanIssue(issue, settings, readChangelog),
+    (issue) => scanIssue(issue, scanContext),
     outOfTime,
   );
 

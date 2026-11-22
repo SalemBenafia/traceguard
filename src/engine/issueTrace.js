@@ -24,11 +24,13 @@ export function sameLinkedIssues(userIssues, appIssues) {
 }
 
 export function toRequirementTrace(requirement, settings) {
-  const { key, summary, rag, gaps, links } = requirement;
+  const { key, summary, rag, gaps, links, ownerName = null, ownerTeam = null } = requirement;
 
   return {
     key,
     summary,
+    ownerName,
+    ownerTeam,
     rag,
     gaps,
     implementation: links

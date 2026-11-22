@@ -97,6 +97,13 @@ describe('toRequirementTrace', () => {
     ]);
   });
 
+  test('includes the owner and team', () => {
+    const trace = toRequirementTrace({ ...requirement, ownerName: 'Demo Owner', ownerTeam: 'Firmware' }, SETTINGS);
+
+    assert.equal(trace.ownerName, 'Demo Owner');
+    assert.equal(trace.ownerTeam, 'Firmware');
+  });
+
   test('keeps the requirement status and gaps', () => {
     const trace = toRequirementTrace(requirement, SETTINGS);
 

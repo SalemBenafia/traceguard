@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
+  ALL_TEAMS,
   auditReadyPercent,
   filterByRag,
+  filterByTeam,
   formatScanTime,
   groupOpenGaps,
   implementationLabel,
   ragTotals,
   sortByRag,
+  teamFilterOptions,
+  teamLabel,
   testsLabel,
 } from '../src/engine/dashboard.js';
 
@@ -44,6 +48,41 @@ describe('filterByRag', () => {
 
   test('a colour keeps only that colour', () => {
     assert.deepEqual(filterByRag(rows, 'amber').map((item) => item.req_key), ['SPF-2']);
+  });
+});
+
+describe('team filter', () => {
+  const rows = [
+    { req_key: 'SPF-1', owner_team: 'Quality' },
+    { req_key: 'SPF-2', owner_team: 'Firmware' },
+    { req_key: 'SPF-3', owner_team: 'No team found' },
+    { req_key: 'SPF-4', owner_team: null },
+    { req_key: 'SPF-5', owner_team: 'Firmware' },
+  ];
+
+  test('rows saved before teams existed show No team found', () => {
+    assert.equal(teamLabel(rows[3]), 'No team found');
+  });
+
+  test('lists each team once, sorted, with No team found last', () => {
+    assert.deepEqual(teamFilterOptions(rows).map((option) => option.label), [
+      'All teams',
+      'Firmware',
+      'Quality',
+      'No team found',
+    ]);
+  });
+
+  test('all teams keeps every row', () => {
+    assert.equal(filterByTeam(rows, ALL_TEAMS).length, 5);
+  });
+
+  test('a team keeps only its rows', () => {
+    assert.deepEqual(filterByTeam(rows, 'Firmware').map((row) => row.req_key), ['SPF-2', 'SPF-5']);
+  });
+
+  test('No team found includes rows with an empty team', () => {
+    assert.deepEqual(filterByTeam(rows, 'No team found').map((row) => row.req_key), ['SPF-3', 'SPF-4']);
   });
 });
 

@@ -13,11 +13,14 @@ import ForgeReconciler, {
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
 import { passedLabel } from '../engine/issueTrace.js';
+import { NO_TEAM } from '../engine/teams.js';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { RagLozenge } from './components/RagLozenge';
 import { errorMessage, StatusMessage } from './components/StatusMessage';
 
 const LOAD_ERROR = 'TraceGuard could not check this work item. Click Recheck to try again.';
+
+const teamText = (team) => team ?? NO_TEAM;
 
 const IssueLink = ({ issueKey }) => <Link href={`/browse/${issueKey}`}>{issueKey}</Link>;
 
@@ -78,6 +81,7 @@ const RequirementView = ({ requirement, warnings }) => (
       <Text weight="bold">Traceability status</Text>
       <RagLozenge rag={requirement.rag} />
     </Inline>
+    <Text>{`Owner: ${requirement.ownerName ?? 'Unassigned'} | Team: ${teamText(requirement.ownerTeam)}`}</Text>
     <GapList gaps={requirement.gaps} />
     <TraceTable
       title="Implementation"
@@ -101,6 +105,7 @@ const SupportingView = ({ requirements }) => (
       <Inline key={requirement.req_key} space="space.100" alignBlock="center" shouldWrap>
         <IssueLink issueKey={requirement.req_key} />
         <Text>{requirement.summary}</Text>
+        <Text>{`Team: ${teamText(requirement.owner_team)}`}</Text>
         <RagLozenge rag={requirement.rag} />
       </Inline>
     ))}

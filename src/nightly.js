@@ -55,9 +55,10 @@ function scanBudget(scanBudgetMs, deadlineAt) {
   return scanBudgetMs ?? Math.max(remaining - COMMENT_TIME_RESERVE_MS, 1_000);
 }
 
-async function runProject(projectKey, { scanBudgetMs, deadlineAt }) {
+async function runProject(projectKey, { scanBudgetMs, deadlineAt, graphAsUser }) {
   const scan = await scanProject(projectKey, {
     asUser: false,
+    graphAsUser,
     source: 'nightly',
     timeBudgetMs: scanBudget(scanBudgetMs, deadlineAt),
   });
@@ -73,7 +74,7 @@ async function runProject(projectKey, { scanBudgetMs, deadlineAt }) {
 const failureMessage = (error) => (error instanceof RequirementJqlError ? error.message : PROJECT_FAILED);
 
 // One failing project is reported and never stops the others.
-export async function runNightly({ projectKeys, deadlineAt, scanBudgetMs = null }) {
+export async function runNightly({ projectKeys, deadlineAt, scanBudgetMs = null, graphAsUser = false }) {
   const summary = { scanned: 0, commentsPosted: 0, commentsWaiting: 0, warnings: [], failures: [] };
   await removeOldCommentSlots(utcDay()).catch((error) => {
     console.error(`[TG] Could not remove old comment limits: ${error.message}`);
@@ -86,7 +87,11 @@ export async function runNightly({ projectKeys, deadlineAt, scanBudgetMs = null 
     }
 
     try {
-      const { scan, posted, waiting } = await runProject(projectKey, { scanBudgetMs, deadlineAt });
+      const { scan, posted, waiting } = await runProject(projectKey, {
+        scanBudgetMs,
+        deadlineAt,
+        graphAsUser,
+      });
       summary.scanned += scan.requirements.length;
       summary.commentsPosted += posted;
       summary.commentsWaiting += waiting;

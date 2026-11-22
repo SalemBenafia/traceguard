@@ -70,6 +70,7 @@ resolver.define('runNightlyNow', async ({ context }) => {
 
   const { failures, ...summary } = await runNightly({
     projectKeys: [projectKey],
+    graphAsUser: true,
     scanBudgetMs: NIGHTLY_NOW_SCAN_BUDGET_MS,
     deadlineAt: Date.now() + NIGHTLY_NOW_DEADLINE_MS,
   });
@@ -104,6 +105,7 @@ resolver.define('rescan', async ({ context }) => {
     // Reads Jira as the app so the shared audit data does not depend on who clicked.
     const { warnings } = await scanProject(projectKey, {
       asUser: false,
+      graphAsUser: true,
       source: 'manual',
       timeBudgetMs: RESCAN_TIME_BUDGET_MS,
     });
