@@ -18,7 +18,6 @@ export const defaultSettings = (projectKey) => ({
   failedStatuses: ['Failed'],
   auditSpaceKey: '',
   commentOnNewGaps: true,
-  llmModel: '',
 });
 
 function storageError(action, projectKey, cause) {
@@ -79,7 +78,6 @@ export function validateSettings(input) {
     ...lists,
     auditSpaceKey: validateSpaceKey(input.auditSpaceKey),
     commentOnNewGaps: input.commentOnNewGaps,
-    llmModel: requireText(input.llmModel, 'LLM model'),
   };
 }
 

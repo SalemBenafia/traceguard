@@ -40,7 +40,6 @@ const TEXT_FIELDS = [
     label: 'Audit Confluence space key',
     help: 'Letters and digits only. Leave empty if not used yet.',
   },
-  { name: 'llmModel', label: 'LLM model', help: 'Leave empty to use the default model.' },
 ];
 
 // The form edits lists as comma-separated text.

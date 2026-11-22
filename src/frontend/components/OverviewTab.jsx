@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Button, EmptyState, Heading, Inline, Lozenge, Stack, Text, xcss } from '@forge/react';
 import { auditReadyPercent, formatScanTime, ragTotals } from '../../engine/dashboard.js';
+import { AuditPackForm } from './AuditPackForm';
 import { errorMessage, StatusMessage } from './StatusMessage';
 
 const tileStyle = xcss({
@@ -78,6 +79,7 @@ export const OverviewTab = ({ data, isScanning, onRescan, scanError, warnings })
         <Tile label="Amber" value={totals.amber} appearance="moved" />
         <Tile label="Red" value={totals.red} appearance="removed" />
       </Inline>
+      <AuditPackForm isDisabled={isScanning} />
     </Stack>
   );
 };

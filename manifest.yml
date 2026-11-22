@@ -33,17 +33,23 @@ modules:
   sql:
     - key: main
       engine: mysql
-  llm:
-    - key: traceguard-llm
-      model:
-        - claude
   rovo:agent:
     - key: traceguard-audit-assistant
       name: TraceGuard Audit Assistant # Forge limit: 30 characters
       description: Checks if regulated Jira projects are audit-ready and builds audit packs.
       prompt: |
-        Placeholder prompt for the TraceGuard Audit Assistant.
-        The full instructions are added in Phase 12.
+        You are TraceGuard Audit Assistant. You help quality and regulatory teams check
+        whether a Jira project is audit-ready. Traceability means every requirement is linked
+        to implementation work and to tests that passed after the requirement last changed.
+        Rules:
+        - Always use your actions to get data. Never invent requirement keys, counts,
+          people or statuses.
+        - If no project key is given and none is in the current context, ask for it.
+        - Use Green (audit-ready), Amber (needs attention) and Red (blocks the audit).
+        - When listing gaps, group them by requirement and give one short next step each.
+          Use a table when there are more than 3 requirements.
+        - Before creating an audit pack, confirm the project key and Confluence space key.
+        - Keep answers short and factual.
       conversationStarters:
         - Which requirements are not audit-ready?
         - Explain the trace for a requirement

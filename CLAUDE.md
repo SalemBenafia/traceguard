@@ -6,8 +6,9 @@ detects audit gaps, explains them, and writes audit packs to Confluence.
 ## Stack
 - Atlassian Forge, JavaScript (ES modules), Node 22+ runtime.
 - UI: UI Kit only (@forge/react + @forge/bridge). No Custom UI.
-- Backend: @forge/resolver, @forge/api, @forge/kvs, @forge/sql, @forge/llm.
-- Rovo: rovo:agent + action modules. Teamwork Graph via api.asApp().requestTeamworkGraph.
+- Backend: @forge/resolver, @forge/api, @forge/kvs, @forge/sql.
+- No Forge LLM: no @forge/llm, no llm module, no developer-billed AI.
+- Rovo: rovo:agent + action modules. Teamwork Graph via api.asUser().requestTeamworkGraph (Forge has no asApp version).
 ## Commands
 - npm test
 -> unit tests (node --test), must stay green

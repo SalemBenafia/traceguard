@@ -1,5 +1,7 @@
 import Resolver from '@forge/resolver';
+import { createAuditPack } from './auditPack';
 import { getHistory, getMatrix, getOpenGaps } from './db/repo';
+import { AuditPackError } from './engine/auditPack';
 import { RequirementJqlError } from './engine/jql';
 import { filterForViewer, filterGapsForViewer, referencedIssueKeys } from './engine/visibility';
 import { getIssueTrace } from './issueTrace';
@@ -7,6 +9,7 @@ import { hasProjectPermission, visibleIssueKeys } from './jira/client';
 import { runNightly } from './nightly';
 import { scanProject } from './scanner';
 import { getSettings, saveSettings, SettingsValidationError } from './settings';
+import { matrixForViewer } from './viewerData';
 
 const resolver = new Resolver();
 
@@ -18,13 +21,6 @@ const NIGHTLY_NOW_DEADLINE_MS = 20_000;
 const failure = (error) => ({ ok: false, error });
 const projectKeyFrom = (context) => context.extension?.project?.key;
 const NO_PROJECT_ERROR = 'TraceGuard could not find the current project.';
-
-// Saved results are shared, so each viewer only receives what Jira lets them see.
-async function matrixForViewer(projectKey) {
-  const matrix = await getMatrix(projectKey);
-  const visibleKeys = await visibleIssueKeys(referencedIssueKeys(matrix));
-  return filterForViewer(matrix, visibleKeys);
-}
 
 // Everything the project page shows, limited to what this viewer can see.
 async function dashboardForViewer(projectKey) {
@@ -159,6 +155,19 @@ resolver.define('getIssueTrace', async ({ context }) => {
     return { ok: true, ...(await getIssueTrace(projectKey, issueKey)) };
   } catch (error) {
     if (error instanceof RequirementJqlError) return failure(error.message);
+    throw error;
+  }
+});
+
+resolver.define('createAuditPack', async ({ payload, context }) => {
+  const projectKey = projectKeyFrom(context);
+  if (!projectKey) return failure(NO_PROJECT_ERROR);
+
+  try {
+    const pack = await createAuditPack(projectKey, payload?.spaceKey, payload?.releaseName, true);
+    return { ok: true, ...pack };
+  } catch (error) {
+    if (error instanceof AuditPackError) return failure(error.message);
     throw error;
   }
 });
