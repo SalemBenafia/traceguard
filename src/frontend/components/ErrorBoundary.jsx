@@ -1,7 +1,7 @@
 import React from 'react';
 import { errorMessage, StatusMessage } from './StatusMessage';
 
-const RENDER_ERROR = 'TraceGuard could not display this section. Reload the page to try again.';
+const RENDER_ERROR = 'TraceGuard could not display this section, so reload the page to try again.';
 
 // React only supports catching render errors in a class component.
 export class ErrorBoundary extends React.Component {

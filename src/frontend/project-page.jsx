@@ -20,8 +20,8 @@ import { MatrixTab } from './components/MatrixTab';
 import { OverviewTab } from './components/OverviewTab';
 import { SettingsTab } from './components/SettingsTab';
 
-const LOAD_ERROR = 'TraceGuard could not load this project. Please try again.';
-const SCAN_ERROR = 'The scan could not finish. Your last results are still shown. Please try again.';
+const LOAD_ERROR = 'TraceGuard could not load this project, so click Try again.';
+const SCAN_ERROR = 'The scan could not finish, so your last results are still shown and you can click Rescan to try again.';
 
 const panelStyle = xcss({ paddingBlock: 'space.200' });
 
@@ -47,7 +47,7 @@ const DataPanel = ({ data, loadError, onRetry, children }) => {
           </Box>
         </Stack>
       ) : (
-        <Spinner label="Loading traceability" />
+        <Spinner label="Loading requirements" />
       )}
     </Panel>
   );
@@ -119,11 +119,18 @@ const App = () => {
         </DataPanel>
       </TabPanel>
       <TabPanel>
-        <DataPanel {...dataPanelProps}>{(loaded) => <MatrixTab matrix={loaded.matrix} />}</DataPanel>
+        <DataPanel {...dataPanelProps}>{(loaded) => <MatrixTab matrix={loaded.matrix} hasScan={Boolean(loaded.lastScan)} />}</DataPanel>
       </TabPanel>
       <TabPanel>
         <DataPanel {...dataPanelProps}>
-          {(loaded) => <GapsTab openGaps={loaded.openGaps} hasScan={Boolean(loaded.lastScan)} />}
+          {(loaded) => (
+            <GapsTab
+              openGaps={loaded.openGaps}
+              hasScan={Boolean(loaded.lastScan)}
+              requirementCount={loaded.matrix.length}
+              hiddenCount={loaded.hiddenCount ?? 0}
+            />
+          )}
         </DataPanel>
       </TabPanel>
       <TabPanel>

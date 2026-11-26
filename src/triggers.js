@@ -1,4 +1,5 @@
 import { kvs } from '@forge/kvs';
+import { errorLabel } from './engine/errors';
 import { groupKeysByProject } from './engine/gapComment';
 import { runNightly } from './nightly';
 import { findRequirementKeysForIssue, scanRequirements } from './scanner';
@@ -19,7 +20,7 @@ async function claimScan(requirementKey) {
 
     await kvs.set(lastScanKey(requirementKey), Date.now(), { ttl: LAST_SCAN_TTL });
   } catch (error) {
-    console.error(`[TG] Could not check the last scan of ${requirementKey}: ${error.message}`);
+    console.error(`[TG] Could not check the last scan of ${requirementKey}: ${errorLabel(error)}`);
   }
   return true;
 }
@@ -29,7 +30,7 @@ async function forgetScans(requirementKeys) {
     try {
       await kvs.delete(lastScanKey(key));
     } catch (error) {
-      console.error(`[TG] Could not reset the last scan of ${key}: ${error.message}`);
+      console.error(`[TG] Could not reset the last scan of ${key}: ${errorLabel(error)}`);
     }
   }
 }
@@ -54,7 +55,7 @@ async function scanByProject(requirementKeys) {
         timeBudgetMs: Math.max(deadlineAt - Date.now(), 1_000),
       });
     } catch (error) {
-      console.error(`[TG] Event scan failed for ${projectKey}: ${error.message}`);
+      console.error(`[TG] Event scan failed for ${projectKey}: ${errorLabel(error)}`);
       await forgetScans(keys);
     }
   }
@@ -75,7 +76,7 @@ export async function onJiraEvent(event) {
     const dueKeys = await keysDueForScan([...keys]);
     if (dueKeys.length > 0) await scanByProject(dueKeys);
   } catch (error) {
-    console.error(`[TG] Event failed: ${error?.message ?? error}`);
+    console.error(`[TG] Event failed: ${errorLabel(error)}`);
   }
 }
 
@@ -88,6 +89,6 @@ export async function nightlyScan() {
         `${summary.commentsPosted} comments, ${summary.commentsWaiting} waiting, ${summary.failures.length} failed`,
     );
   } catch (error) {
-    console.error(`[TG] Nightly job failed: ${error?.message ?? error}`);
+    console.error(`[TG] Nightly job failed: ${errorLabel(error)}`);
   }
 }

@@ -1,6 +1,7 @@
 import React from 'react';
 import { DynamicTable } from '@forge/react';
-import { formatScanTime } from '../../engine/dashboard.js';
+import { NoScanState } from './EmptyStates';
+import { formatScanTime, scanSourceLabel } from '../../engine/dashboard.js';
 
 const ROWS_PER_PAGE = 15;
 
@@ -18,7 +19,7 @@ const toTableRow = (run) => ({
   key: run.id,
   cells: [
     { key: 'date', content: formatScanTime(run.finished_at) },
-    { key: 'source', content: run.source },
+    { key: 'source', content: scanSourceLabel(run.source) },
     { key: 'green', content: String(run.green ?? 0) },
     { key: 'amber', content: String(run.amber ?? 0) },
     { key: 'red', content: String(run.red ?? 0) },
@@ -26,12 +27,15 @@ const toTableRow = (run) => ({
 });
 
 // The backend already returns scan runs newest first.
-export const HistoryTab = ({ history }) => (
-  <DynamicTable
-    label="Scan history"
-    head={HEAD}
-    rows={history.map(toTableRow)}
-    rowsPerPage={ROWS_PER_PAGE}
-    emptyView="No scans yet. Run the first scan from the Overview tab."
-  />
-);
+export const HistoryTab = ({ history }) => {
+  if (history.length === 0) return <NoScanState />;
+
+  return (
+    <DynamicTable
+      label="Scan history"
+      head={HEAD}
+      rows={history.map(toTableRow)}
+      rowsPerPage={ROWS_PER_PAGE}
+    />
+  );
+};

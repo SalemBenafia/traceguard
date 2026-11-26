@@ -1,5 +1,6 @@
 import api from '@forge/api';
 import { kvs } from '@forge/kvs';
+import { errorLabel } from '../engine/errors';
 import { isFreshTeamCache, parseTeams, TEAMS_OPERATION_NAME } from '../engine/teams';
 
 const QUERY = `query ${TEAMS_OPERATION_NAME}($queryKey: String!, $queryParams: CypherRequestParams) {
@@ -37,8 +38,7 @@ const NO_TEAM_HINT =
 const teamCacheKey = (accountId) => `team:${accountId}`;
 const queryKeyVariable = () => process.env.TWG_USER_TEAMS_QUERY_KEY;
 
-const graphErrorCodes = (errors) =>
-  errors.map((error) => error.extensions?.code ?? error.message ?? 'UNKNOWN').join(', ');
+const graphError = (code) => Object.assign(new Error('Teamwork Graph request failed.'), { code });
 
 // Forge apps cannot call Teamwork Graph as the app, so this needs a signed-in user.
 export async function getTeamsForUser(accountId) {
@@ -47,12 +47,12 @@ export async function getTeamsForUser(accountId) {
 
   const variables = { queryKey, queryParams: { id: `ari:cloud:identity::user/${accountId}` } };
   const res = await api.asUser().requestTeamworkGraph(QUERY, variables, TEAMS_OPERATION_NAME);
-  if (!res.ok) throw new Error(`Teamwork Graph request failed with status ${res.status}.`);
+  if (!res.ok) throw graphError(`HTTP_${res.status}`);
 
   const json = await res.json();
   const teams = parseTeams(json);
   if (json.errors?.length && teams.length === 0) {
-    throw new Error(`Teamwork Graph returned errors: ${graphErrorCodes(json.errors)}`);
+    throw graphError(json.errors[0].extensions?.code ?? 'GRAPH_ERROR');
   }
   return teams;
 }
@@ -62,7 +62,7 @@ async function readCachedTeam(accountId) {
     const entry = await kvs.get(teamCacheKey(accountId));
     return isFreshTeamCache(entry) ? entry.teams[0].name : null;
   } catch (error) {
-    console.error(`[TG] Could not read the team cache: ${error.message}`);
+    console.error(`[TG] Could not read the team cache: ${errorLabel(error)}`);
     return null;
   }
 }
@@ -71,7 +71,7 @@ async function cacheTeams(accountId, teams) {
   try {
     await kvs.set(teamCacheKey(accountId), { teams, cachedAt: Date.now() }, { ttl: TEAM_CACHE_TTL });
   } catch (error) {
-    console.error(`[TG] Could not save the team cache: ${error.message}`);
+    console.error(`[TG] Could not save the team cache: ${errorLabel(error)}`);
   }
 }
 
@@ -107,7 +107,7 @@ export function createTeamLookup({ canCallGraph = false } = {}) {
       return teams[0].name;
     } catch (error) {
       graphFailed = true;
-      console.error(`[TG] Teamwork Graph lookup failed: ${error.message}`);
+      console.error(`[TG] Teamwork Graph lookup failed: ${errorLabel(error)}`);
       logHint();
       return null;
     }

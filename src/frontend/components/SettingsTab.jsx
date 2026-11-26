@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   Box,
   Button,
+  EmptyState,
   Form,
   FormFooter,
   Heading,
@@ -24,7 +25,7 @@ const TEXT_FIELDS = [
   {
     name: 'requirementJql',
     label: 'Requirement JQL',
-    help: 'Finds the work items TraceGuard treats as requirements.',
+    help: 'Finds the Jira work items TraceGuard treats as requirements.',
     required: true,
   },
   {
@@ -32,12 +33,12 @@ const TEXT_FIELDS = [
     label: 'Implementation work types',
     help: 'Comma-separated, for example: Story, Task, Bug',
   },
-  { name: 'testTypes', label: 'Test work types', help: 'Comma-separated, for example: Test' },
+  { name: 'testTypes', label: 'Verification work types', help: 'Comma-separated, for example: Test' },
   { name: 'passedStatuses', label: 'Passed statuses', help: 'Comma-separated, for example: Passed' },
   { name: 'failedStatuses', label: 'Failed statuses', help: 'Comma-separated, for example: Failed' },
   {
     name: 'auditSpaceKey',
-    label: 'Audit Confluence space key',
+    label: 'Confluence space key for audit packs',
     help: 'Letters and digits only. Leave empty if not used yet.',
   },
 ];
@@ -85,9 +86,22 @@ const SettingsForm = ({ settings, onSave }) => {
   );
 };
 
+const counted = (count, noun) => `${count} ${noun}${count === 1 ? '' : 's'}`;
+
 const nightlyResultText = ({ scanned, commentsPosted, commentsWaiting }) =>
-  `Nightly job finished: ${scanned} requirements scanned, ${commentsPosted} comments posted, ` +
-  `${commentsWaiting} comments waiting.`;
+  `Nightly job finished: ${counted(scanned, 'requirement')} scanned, ` +
+  `${counted(commentsPosted, 'comment')} posted, ${commentsWaiting} waiting.`;
+
+const NoSettingsState = ({ canEdit }) => (
+  <EmptyState
+    header="No settings saved yet"
+    description={
+      canEdit
+        ? 'Review the defaults below and click Save to turn on live updates and the nightly scan.'
+        : 'Ask a project admin to save these settings to turn on live updates and the nightly scan.'
+    }
+  />
+);
 
 const NightlyRunner = () => {
   const [isRunning, setIsRunning] = useState(false);
@@ -107,7 +121,7 @@ const NightlyRunner = () => {
         ...result.warnings.map((text) => ({ appearance: 'warning', text })),
       ]);
     } catch {
-      setMessages([errorMessage('The nightly job could not finish. Please try again.')]);
+      setMessages([errorMessage('The nightly job could not finish, so click Run nightly job now to try again.')]);
     } finally {
       setIsRunning(false);
     }
@@ -131,6 +145,7 @@ const NightlyRunner = () => {
 export const SettingsTab = () => {
   const [settings, setSettings] = useState(null);
   const [canRunNightly, setCanRunNightly] = useState(false);
+  const [hasSavedSettings, setHasSavedSettings] = useState(true);
   const [formVersion, setFormVersion] = useState(0);
   const [message, setMessage] = useState(null);
 
@@ -140,11 +155,12 @@ export const SettingsTab = () => {
         if (result.ok) {
           setSettings(result.settings);
           setCanRunNightly(result.canRunNightly === true);
+          setHasSavedSettings(result.hasSavedSettings === true);
         } else {
           setMessage(errorMessage(result.error));
         }
       })
-      .catch(() => setMessage(errorMessage('Could not load settings. Please try again.')));
+      .catch(() => setMessage(errorMessage('TraceGuard could not load settings, so reload the page to try again.')));
   }, []);
 
   const save = async (values) => {
@@ -156,11 +172,12 @@ export const SettingsTab = () => {
         return;
       }
       setSettings(result.settings);
+      setHasSavedSettings(true);
       // A new key rebuilds the form so it shows the cleaned, saved values.
       setFormVersion((version) => version + 1);
       setMessage({ appearance: 'success', text: 'Settings saved.' });
     } catch {
-      setMessage(errorMessage('Could not save settings. Please try again.'));
+      setMessage(errorMessage('TraceGuard could not save settings, so click Save to try again.'));
     }
   };
 
@@ -171,6 +188,7 @@ export const SettingsTab = () => {
   return (
     <Stack space="space.200">
       {message && <StatusMessage message={message} />}
+      {!hasSavedSettings && <NoSettingsState canEdit={canRunNightly} />}
       <SettingsForm key={formVersion} settings={settings} onSave={save} />
       {canRunNightly && <NightlyRunner />}
     </Stack>

@@ -18,10 +18,10 @@ const MAX_TITLE_ATTEMPTS = 20;
 function chooseSpaceKey(input, settings) {
   const spaceKey = (typeof input === 'string' ? input.trim() : '') || settings.auditSpaceKey;
   if (!spaceKey) {
-    throw new AuditPackError('Which Confluence space should receive the audit pack? Give a space key or set one in Settings.');
+    throw new AuditPackError('Enter a Confluence space key, or set one in TraceGuard Settings.');
   }
   if (!isValidSpaceKey(spaceKey)) {
-    throw new AuditPackError('The Confluence space key can only contain letters and digits.');
+    throw new AuditPackError('Use only letters and digits in the Confluence space key.');
   }
   return spaceKey;
 }
@@ -39,25 +39,25 @@ async function createWithFreeTitle(space, baseTitle, html) {
       if (!(error instanceof TitleTakenError)) throw error;
     }
   }
-  throw new AuditPackError('Too many audit packs already use this title. Use a different release name.');
+  throw new AuditPackError('Too many audit packs use this title, so enter a different release name.');
 }
 
 export async function createAuditPack(projectKey, spaceKey, releaseName, asUser) {
-  if (asUser !== true) throw new AuditPackError('Audit packs must be created by a signed-in user.');
+  if (asUser !== true) throw new AuditPackError('Audit packs must be created by a signed-in user, so sign in and try again.');
   if (!(await hasProjectPermission(projectKey, 'BROWSE_PROJECTS'))) {
-    throw new AuditPackError(`You do not have access to project ${projectKey}.`);
+    throw new AuditPackError(`You do not have access to project ${projectKey}, so ask a project admin for access.`);
   }
 
   const settings = await getSettings(projectKey);
   const targetSpaceKey = chooseSpaceKey(spaceKey, settings);
   const scan = await getLatestScanRun(projectKey);
-  if (!scan) throw new AuditPackError('Run a TraceGuard scan before creating an audit pack.');
+  if (!scan) throw new AuditPackError('Run a scan on the Overview tab before creating an audit pack.');
 
   const { matrix, hiddenCount } = await viewerMatrix(projectKey);
-  if (matrix.length === 0) throw new AuditPackError('There are no requirements you can see to include in an audit pack.');
+  if (matrix.length === 0) throw new AuditPackError('You cannot see any requirements to include, so check the Requirement JQL or ask a project admin for access.');
 
   const space = await getSpace(targetSpaceKey);
-  if (!space.baseUrl) throw new AuditPackError('TraceGuard could not find the site address in Confluence.');
+  if (!space.baseUrl) throw new AuditPackError('TraceGuard could not find the Confluence site address, so try again in a moment.');
 
   const release = normalizeReleaseName(releaseName);
   const day = utcDay();

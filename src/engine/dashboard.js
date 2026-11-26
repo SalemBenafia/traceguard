@@ -8,14 +8,31 @@ const RAG_ORDER = { red: 0, amber: 1, green: 2 };
 // Listed in display order: red gaps first, then amber.
 const GAP_TITLES = {
   NO_IMPLEMENTATION: 'Requirements with no implementation',
-  NO_TEST: 'Requirements with no test',
-  TEST_FAILED: 'Requirements with a failed test',
-  STALE_VERIFICATION: 'Requirements changed after their last passing test',
-  TEST_NOT_RUN: 'Requirements with a test that has not run',
+  NO_TEST: 'Requirements with no verification',
+  TEST_FAILED: 'Requirements with failed verification',
+  STALE_VERIFICATION: 'Requirements changed after their last passed verification',
+  TEST_NOT_RUN: 'Requirements with verification not run',
   IMPLEMENTATION_OPEN: 'Requirements with unfinished implementation',
   NO_OWNER: 'Requirements with no owner',
 };
 const GAP_ORDER = Object.keys(GAP_TITLES);
+
+const GAP_NAMES = {
+  NO_IMPLEMENTATION: 'No implementation',
+  NO_TEST: 'No verification',
+  TEST_FAILED: 'Verification failed',
+  STALE_VERIFICATION: 'Verification out of date',
+  TEST_NOT_RUN: 'Verification not run',
+  IMPLEMENTATION_OPEN: 'Implementation open',
+  NO_OWNER: 'No owner',
+};
+
+const SCAN_SOURCES = {
+  manual: 'Manual scan',
+  nightly: 'Nightly scan',
+  event: 'Jira update',
+  agent: 'Rovo agent',
+};
 
 const SCAN_TIME = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$/;
 
@@ -43,6 +60,17 @@ export function teamFilterOptions(rows) {
     { label: 'All teams', value: ALL_TEAMS },
     ...ordered.map((name) => ({ label: name, value: name })),
   ];
+}
+
+export const gapName = (code) => GAP_NAMES[code] ?? 'Gap';
+
+export const scanSourceLabel = (source) => SCAN_SOURCES[source] ?? 'Scan';
+
+// "Audit-ready" is only claimed when the viewer can see every requirement.
+export function noGapsState({ hasScan, requirementCount, hiddenCount }) {
+  if (!hasScan) return 'noScan';
+  if (requirementCount === 0) return 'noRequirements';
+  return hiddenCount > 0 ? 'partial' : 'ready';
 }
 
 export function ragTotals(rows) {

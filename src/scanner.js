@@ -3,6 +3,7 @@ import { getSavedOwners, saveScan } from './db/repo';
 import { buildChain } from './engine/chain';
 import { latestContentChange, latestMoveToStatus } from './engine/changelog';
 import { mapWithLimit } from './engine/concurrency';
+import { errorLabel } from './engine/errors';
 import { requirementJql, RequirementJqlError } from './engine/jql';
 import { groupKeysByProject } from './engine/gapComment';
 import { linkedIssueKeys, sameLinkedIssues } from './engine/issueTrace';
@@ -16,7 +17,7 @@ const MAX_REQUIREMENTS = 500;
 const MAX_PARALLEL_REQUIREMENTS = 5;
 const SEARCH_FIELDS = ['summary', 'status', 'assignee', 'issuelinks', 'issuetype', 'updated'];
 const LIMITED_VIEW_WARNING =
-  'You cannot see every linked work item, so this result may be incomplete and was not saved.';
+  'You cannot see every linked work item, so this result was not saved and a project admin should recheck it.';
 
 // A test linked to several requirements only has its changelog read once per scan.
 function createChangelogReader(asUser) {
@@ -70,7 +71,7 @@ async function findRequirements(jql, asUser) {
     return await searchAll(jql, SEARCH_FIELDS, { asUser, max: MAX_REQUIREMENTS + 1 });
   } catch (error) {
     if (error.status === 400) {
-      throw new RequirementJqlError('Jira rejected the Requirement JQL. Check it in Settings.');
+      throw new RequirementJqlError('Jira rejected the Requirement JQL, so correct it in Settings and scan again.');
     }
     throw error;
   }
@@ -118,11 +119,11 @@ async function runScan(
 
   const warnings = [];
   if (found.length > MAX_REQUIREMENTS) {
-    warnings.push(`Only the first ${MAX_REQUIREMENTS} requirements were scanned.`);
+    warnings.push(`Only the first ${MAX_REQUIREMENTS} requirements were scanned, so narrow the Requirement JQL in Settings to include the rest.`);
   }
   if (requirements.length < issues.length) {
     warnings.push(
-      `The scan stopped early to stay within Forge's time limit: ${requirements.length} of ${issues.length} requirements were checked.`,
+      `TraceGuard checked ${requirements.length} of ${issues.length} requirements before the time limit, so wait for the nightly scan or narrow the Requirement JQL.`,
     );
   }
 
@@ -167,7 +168,7 @@ async function savedRequirementKeys(projectKey, keys) {
     return issues.map((issue) => issue.key);
   } catch (error) {
     if (error instanceof RequirementJqlError || error.status === 400) {
-      console.error(`[TG] Requirement JQL failed for ${projectKey}: ${error.message}`);
+      console.error(`[TG] Requirement JQL failed for ${projectKey}: ${errorLabel(error)}`);
       return [];
     }
     throw error;

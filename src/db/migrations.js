@@ -1,4 +1,7 @@
+import { getAppContext } from '@forge/api';
+import { kvs } from '@forge/kvs';
 import { migrationRunner } from '@forge/sql';
+import { errorLabel } from '../engine/errors';
 
 const CREATE_REQUIREMENTS = `CREATE TABLE IF NOT EXISTS tg_requirements (
   project_key VARCHAR(32) NOT NULL,
@@ -56,44 +59,75 @@ const CREATE_COMMENT_SLOTS = `CREATE TABLE IF NOT EXISTS tg_comment_slots (
   PRIMARY KEY (comment_day, slot)
 )`;
 
+// Every page load reads the latest finished scans of one project.
+const CREATE_SCAN_HISTORY_INDEX = `CREATE INDEX IF NOT EXISTS idx_scan_runs_history
+  ON tg_scan_runs (project_key, finished_at, started_at)`;
+
+const SCHEMA_VERSION = 'v006_tg_scan_runs_history_index';
+const SCHEMA_VERSION_KEY = 'schema-version';
+
 // Declared once at module level, as Forge recommends.
 const runner = migrationRunner
   .enqueue('v001_tg_requirements', CREATE_REQUIREMENTS)
   .enqueue('v002_tg_scan_runs', CREATE_SCAN_RUNS)
   .enqueue('v003_tg_gap_events', CREATE_GAP_EVENTS)
   .enqueue('v004_tg_pending_gap_comments', CREATE_PENDING_GAP_COMMENTS)
-  .enqueue('v005_tg_comment_slots', CREATE_COMMENT_SLOTS);
+  .enqueue('v005_tg_comment_slots', CREATE_COMMENT_SLOTS)
+  .enqueue(SCHEMA_VERSION, CREATE_SCAN_HISTORY_INDEX);
 
-let ready = false;
+// Forge can reuse one process for several customers, so readiness is kept per install.
+const readyInstallations = new Set();
 
-// Logging must never stop a scan, so a failure here is only reported.
-async function logAppliedMigrations() {
+function currentInstallationId() {
   try {
-    const migrations = await runner.list();
-    console.log(
-      '[TG] migrations in database:',
-      migrations.map(({ name, migratedAt }) => `${name} (${String(migratedAt)})`),
-    );
-  } catch (error) {
-    console.error(`[TG] Could not list migrations: ${error.message}`);
+    return getAppContext().installationAri.installationId;
+  } catch {
+    return null;
   }
+}
+
+function markReady() {
+  const installationId = currentInstallationId();
+  if (installationId) readyInstallations.add(installationId);
+}
+
+async function schemaIsCurrent() {
+  try {
+    return (await kvs.get(SCHEMA_VERSION_KEY)) === SCHEMA_VERSION;
+  } catch (error) {
+    console.error(`[TG] Could not read the schema version: ${errorLabel(error)}`);
+    return false;
+  }
+}
+
+async function rememberSchemaVersion() {
+  try {
+    await kvs.set(SCHEMA_VERSION_KEY, SCHEMA_VERSION);
+  } catch (error) {
+    console.error(`[TG] Could not save the schema version: ${errorLabel(error)}`);
+  }
+}
+
+async function applyMigrations() {
+  try {
+    const applied = await runner.run();
+    if (applied.length > 0) console.log('[TG] migrations applied:', applied);
+  } catch (error) {
+    console.error(`[TG] Migrations failed: ${errorLabel(error)}`);
+    throw new Error('Could not prepare the TraceGuard database.');
+  }
+  await rememberSchemaVersion();
 }
 
 export async function ensureMigrations() {
-  if (ready) return;
+  if (readyInstallations.has(currentInstallationId())) return;
 
-  try {
-    const applied = await runner.run();
-    console.log('[TG] migrations applied:', applied);
-  } catch (error) {
-    console.error(`[TG] Migrations failed: ${error.message}`);
-    throw new Error('Could not prepare the TraceGuard database.');
-  }
-
-  await logAppliedMigrations();
-  ready = true;
+  if (!(await schemaIsCurrent())) await applyMigrations();
+  markReady();
 }
 
+// The hourly job always runs, so it can repair a missing or failed migration.
 export const runMigrations = async () => {
-  await ensureMigrations();
+  await applyMigrations();
+  markReady();
 };

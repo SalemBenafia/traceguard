@@ -18,7 +18,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { RagLozenge } from './components/RagLozenge';
 import { errorMessage, StatusMessage } from './components/StatusMessage';
 
-const LOAD_ERROR = 'TraceGuard could not check this work item. Click Recheck to try again.';
+const LOAD_ERROR = 'TraceGuard could not check this work item, so click Recheck to try again.';
 
 const teamText = (team) => team ?? NO_TEAM;
 
@@ -61,9 +61,9 @@ const TraceTable = ({ title, head, rows, emptyText }) => (
   </Stack>
 );
 
-const GapList = ({ gaps }) =>
+const GapList = ({ gaps, isLimited }) =>
   gaps.length === 0 ? (
-    <Text>No gaps found.</Text>
+    <Text>{isLimited ? 'No gaps in the work items you can see.' : 'Audit-ready: this requirement has no gaps.'}</Text>
   ) : (
     <List type="unordered">
       {gaps.map((gap) => (
@@ -78,22 +78,22 @@ const RequirementView = ({ requirement, warnings }) => (
       <StatusMessage key={warning} message={{ appearance: 'warning', text: warning }} />
     ))}
     <Inline space="space.100" alignBlock="center">
-      <Text weight="bold">Traceability status</Text>
+      <Text weight="bold">Status</Text>
       <RagLozenge rag={requirement.rag} />
     </Inline>
     <Text>{`Owner: ${requirement.ownerName ?? 'Unassigned'} | Team: ${teamText(requirement.ownerTeam)}`}</Text>
-    <GapList gaps={requirement.gaps} />
+    <GapList gaps={requirement.gaps} isLimited={warnings.length > 0} />
     <TraceTable
       title="Implementation"
       head={IMPLEMENTATION_HEAD}
       rows={requirement.implementation.map(implementationRow)}
-      emptyText="No linked implementation work."
+      emptyText="No implementation is linked."
     />
     <TraceTable
       title="Verification"
       head={VERIFICATION_HEAD}
       rows={requirement.verification.map(verificationRow)}
-      emptyText="No linked tests."
+      emptyText="No verification is linked."
     />
   </Stack>
 );
@@ -147,7 +147,7 @@ const IssuePanel = () => {
     <Stack space="space.200">
       {error && <StatusMessage message={errorMessage(error)} />}
       {trace && <TraceView trace={trace} />}
-      {isLoading && <Spinner size="small" label="Checking traceability" />}
+      {isLoading && <Spinner size="small" label="Checking this requirement" />}
       <Inline>
         <Button onClick={load} isDisabled={isLoading}>
           Recheck

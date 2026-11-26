@@ -3,12 +3,12 @@ import { createAuditPack } from './auditPack';
 import { getHistory, getMatrix, getOpenGaps } from './db/repo';
 import { AuditPackError } from './engine/auditPack';
 import { RequirementJqlError } from './engine/jql';
-import { filterForViewer, filterGapsForViewer, referencedIssueKeys } from './engine/visibility';
+import { filterForViewer, filterGapsForViewer, referencedIssueKeys, toDashboardRow } from './engine/visibility';
 import { getIssueTrace } from './issueTrace';
 import { hasProjectPermission, visibleIssueKeys } from './jira/client';
 import { runNightly } from './nightly';
 import { scanProject } from './scanner';
-import { getSettings, saveSettings, SettingsValidationError } from './settings';
+import { defaultSettings, getSavedSettings, saveSettings, SettingsValidationError } from './settings';
 import { matrixForViewer } from './viewerData';
 
 const resolver = new Resolver();
@@ -20,7 +20,8 @@ const NIGHTLY_NOW_DEADLINE_MS = 20_000;
 
 const failure = (error) => ({ ok: false, error });
 const projectKeyFrom = (context) => context.extension?.project?.key;
-const NO_PROJECT_ERROR = 'TraceGuard could not find the current project.';
+const NO_PROJECT_ERROR = 'TraceGuard could not find this project, so reload the page and try again.';
+const NO_ACCESS_ERROR = 'You do not have access to this project, so ask a project admin for access.';
 
 // Everything the project page shows, limited to what this viewer can see.
 async function dashboardForViewer(projectKey) {
@@ -32,8 +33,10 @@ async function dashboardForViewer(projectKey) {
     ...openGaps.map((gap) => gap.req_key),
   ]);
 
+  const visibleMatrix = filterForViewer(matrix, visibleKeys);
   return {
-    matrix: filterForViewer(matrix, visibleKeys),
+    matrix: visibleMatrix.map(toDashboardRow),
+    hiddenCount: matrix.length - visibleMatrix.length,
     openGaps: filterGapsForViewer(openGaps, visibleKeys),
     history,
     lastScan: history[0] ?? null,
@@ -46,11 +49,13 @@ resolver.define('getSettings', async ({ context }) => {
 
   // Settings live in app storage, which does not apply Jira permissions by itself.
   if (!(await hasProjectPermission(projectKey, 'BROWSE_PROJECTS'))) {
-    return failure('You need access to this project to view its TraceGuard settings.');
+    return failure(NO_ACCESS_ERROR);
   }
+  const saved = await getSavedSettings(projectKey);
   return {
     ok: true,
-    settings: await getSettings(projectKey),
+    settings: saved ?? defaultSettings(projectKey),
+    hasSavedSettings: saved !== null,
     // Only controls the button. runNightlyNow checks this permission again.
     canRunNightly: await hasProjectPermission(projectKey, 'ADMINISTER_PROJECTS').catch(() => false),
   };
@@ -61,7 +66,7 @@ resolver.define('runNightlyNow', async ({ context }) => {
   if (!projectKey) return failure(NO_PROJECT_ERROR);
 
   if (!(await hasProjectPermission(projectKey, 'ADMINISTER_PROJECTS'))) {
-    return failure('Only project admins can run the nightly job.');
+    return failure('Only project admins can run the nightly job, so ask a project admin to run it.');
   }
 
   const { failures, ...summary } = await runNightly({
@@ -78,7 +83,7 @@ resolver.define('saveSettings', async ({ payload, context }) => {
   if (!projectKey) return failure(NO_PROJECT_ERROR);
 
   if (!(await hasProjectPermission(projectKey, 'ADMINISTER_PROJECTS'))) {
-    return failure('Only project admins can change TraceGuard settings.');
+    return failure('Only project admins can change TraceGuard settings, so ask a project admin to make this change.');
   }
 
   try {
@@ -94,7 +99,7 @@ resolver.define('rescan', async ({ context }) => {
   if (!projectKey) return failure(NO_PROJECT_ERROR);
 
   if (!(await hasProjectPermission(projectKey, 'BROWSE_PROJECTS'))) {
-    return failure('You need access to this project to run a TraceGuard scan.');
+    return failure(NO_ACCESS_ERROR);
   }
 
   try {
@@ -117,7 +122,7 @@ resolver.define('getOverview', async ({ context }) => {
   if (!projectKey) return failure(NO_PROJECT_ERROR);
 
   if (!(await hasProjectPermission(projectKey, 'BROWSE_PROJECTS'))) {
-    return failure('You need access to this project to view its TraceGuard dashboard.');
+    return failure(NO_ACCESS_ERROR);
   }
   return { ok: true, ...(await dashboardForViewer(projectKey)) };
 });
@@ -127,9 +132,9 @@ resolver.define('getMatrix', async ({ context }) => {
   if (!projectKey) return failure(NO_PROJECT_ERROR);
 
   if (!(await hasProjectPermission(projectKey, 'BROWSE_PROJECTS'))) {
-    return failure('You need access to this project to view its traceability matrix.');
+    return failure(NO_ACCESS_ERROR);
   }
-  return { ok: true, matrix: await matrixForViewer(projectKey) };
+  return { ok: true, matrix: (await matrixForViewer(projectKey)).map(toDashboardRow) };
 });
 
 resolver.define('getHistory', async ({ context }) => {
@@ -137,7 +142,7 @@ resolver.define('getHistory', async ({ context }) => {
   if (!projectKey) return failure(NO_PROJECT_ERROR);
 
   if (!(await hasProjectPermission(projectKey, 'BROWSE_PROJECTS'))) {
-    return failure('You need access to this project to view its scan history.');
+    return failure(NO_ACCESS_ERROR);
   }
   return { ok: true, history: await getHistory(projectKey) };
 });
@@ -145,10 +150,10 @@ resolver.define('getHistory', async ({ context }) => {
 resolver.define('getIssueTrace', async ({ context }) => {
   const projectKey = projectKeyFrom(context);
   const issueKey = context.extension?.issue?.key;
-  if (!projectKey || !issueKey) return failure('TraceGuard could not find this work item.');
+  if (!projectKey || !issueKey) return failure('TraceGuard could not find this work item, so reload the page and try again.');
 
   if (!(await hasProjectPermission(projectKey, 'BROWSE_PROJECTS'))) {
-    return failure('You need access to this project to view traceability.');
+    return failure(NO_ACCESS_ERROR);
   }
 
   try {

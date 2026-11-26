@@ -14,12 +14,12 @@ const STATUS_MACROS = {
 };
 
 export const NEXT_STEPS = {
-  NO_IMPLEMENTATION: 'Link the story, task or bug that implements this requirement.',
-  NO_TEST: 'Link a test that verifies this requirement.',
-  TEST_FAILED: 'Fix the failure and run the linked test again.',
-  STALE_VERIFICATION: 'Run the linked test again against the changed requirement.',
-  TEST_NOT_RUN: 'Run the linked test and record the result.',
-  IMPLEMENTATION_OPEN: 'Finish the linked implementation work.',
+  NO_IMPLEMENTATION: 'Link the implementation work for this requirement.',
+  NO_TEST: 'Link a verification test to this requirement.',
+  TEST_FAILED: 'Fix the failure and run the verification again.',
+  STALE_VERIFICATION: 'Run the verification again against the changed requirement.',
+  TEST_NOT_RUN: 'Run the verification and record the result.',
+  IMPLEMENTATION_OPEN: 'Finish the linked implementation.',
   NO_OWNER: 'Assign an owner to this requirement.',
 };
 

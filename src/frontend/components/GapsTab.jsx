@@ -1,6 +1,7 @@
 import React from 'react';
 import { Badge, Box, EmptyState, Heading, Inline, Link, Stack, xcss } from '@forge/react';
-import { groupOpenGaps } from '../../engine/dashboard.js';
+import { groupOpenGaps, noGapsState } from '../../engine/dashboard.js';
+import { NoRequirementsState, NoScanState } from './EmptyStates';
 
 const groupStyle = xcss({
   padding: 'space.200',
@@ -28,20 +29,31 @@ const GapGroup = ({ group }) => (
   </Box>
 );
 
-export const GapsTab = ({ openGaps, hasScan }) => {
+const NoGaps = (props) => {
+  const state = noGapsState(props);
+  if (state === 'noScan') return <NoScanState />;
+  if (state === 'noRequirements') return <NoRequirementsState />;
+  if (state === 'partial') {
+    return (
+      <EmptyState
+        header="No gaps you can see"
+        description="Some requirements are hidden by your Jira permissions, so ask a project admin to confirm this project is audit-ready."
+      />
+    );
+  }
+  return (
+    <EmptyState
+      header="Everything is audit-ready"
+      description="Every requirement has linked implementation and passed verification."
+    />
+  );
+};
+
+export const GapsTab = ({ openGaps, hasScan, requirementCount, hiddenCount }) => {
   const groups = groupOpenGaps(openGaps);
 
   if (groups.length === 0) {
-    return (
-      <EmptyState
-        header={hasScan ? 'No open gaps' : 'No scan yet'}
-        description={
-          hasScan
-            ? 'The latest scan found no open gaps that you can see.'
-            : 'Run the first scan from the Overview tab to find audit gaps.'
-        }
-      />
-    );
+    return <NoGaps hasScan={hasScan} requirementCount={requirementCount} hiddenCount={hiddenCount} />;
   }
 
   return (

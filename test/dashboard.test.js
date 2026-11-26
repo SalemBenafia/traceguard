@@ -6,9 +6,12 @@ import {
   filterByRag,
   filterByTeam,
   formatScanTime,
+  gapName,
   groupOpenGaps,
   implementationLabel,
+  noGapsState,
   ragTotals,
+  scanSourceLabel,
   sortByRag,
   teamFilterOptions,
   teamLabel,
@@ -115,7 +118,7 @@ describe('groupOpenGaps', () => {
     const groups = groupOpenGaps([gap('SPF-19', 'NO_TEST'), gap('SPF-5', 'NO_TEST')]);
 
     assert.deepEqual(groups, [
-      { code: 'NO_TEST', title: 'Requirements with no test', count: 2, keys: ['SPF-5', 'SPF-19'] },
+      { code: 'NO_TEST', title: 'Requirements with no verification', count: 2, keys: ['SPF-5', 'SPF-19'] },
     ]);
   });
 
@@ -196,5 +199,45 @@ describe('formatScanTime', () => {
 
   test('shows an unknown format as it is instead of failing', () => {
     assert.equal(formatScanTime('not a date'), 'not a date');
+  });
+});
+
+describe('display names', () => {
+  test('every gap code has a readable name', () => {
+    const codes = ['NO_IMPLEMENTATION', 'NO_TEST', 'TEST_FAILED', 'STALE_VERIFICATION', 'TEST_NOT_RUN', 'IMPLEMENTATION_OPEN', 'NO_OWNER'];
+
+    assert.ok(codes.every((code) => gapName(code) !== 'Gap' && !gapName(code).includes('_')));
+  });
+
+  test('an unknown gap code never shows a raw code', () => {
+    assert.equal(gapName('NEW_RULE'), 'Gap');
+  });
+
+  test('scan sources have readable names', () => {
+    assert.deepEqual(['manual', 'nightly', 'event', 'agent', 'other'].map(scanSourceLabel), [
+      'Manual scan',
+      'Nightly scan',
+      'Jira update',
+      'Rovo agent',
+      'Scan',
+    ]);
+  });
+});
+
+describe('noGapsState', () => {
+  test('asks for a scan first', () => {
+    assert.equal(noGapsState({ hasScan: false, requirementCount: 0, hiddenCount: 0 }), 'noScan');
+  });
+
+  test('never calls an empty project audit-ready', () => {
+    assert.equal(noGapsState({ hasScan: true, requirementCount: 0, hiddenCount: 0 }), 'noRequirements');
+  });
+
+  test('never calls a partly hidden project audit-ready', () => {
+    assert.equal(noGapsState({ hasScan: true, requirementCount: 5, hiddenCount: 1 }), 'partial');
+  });
+
+  test('is audit-ready only when every requirement is visible', () => {
+    assert.equal(noGapsState({ hasScan: true, requirementCount: 5, hiddenCount: 0 }), 'ready');
   });
 });

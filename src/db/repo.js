@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from '@forge/sql';
+import { errorLabel } from '../engine/errors';
 import { gapMessage, groupKeysByProject } from '../engine/gapComment';
 import { batchByBytes, chunk, diffGaps, gapEventId, sortByKeyNumber } from '../engine/gapDiff';
 import { ensureMigrations } from './migrations';
@@ -8,6 +9,7 @@ const MAX_ROWS_PER_WRITE = 50;
 const MAX_BYTES_PER_WRITE = 512 * 1024; // Forge SQL requests are limited to 1 MiB.
 const MAX_KEYS_PER_STATEMENT = 200;
 const MAX_HISTORY_ROWS = 100;
+const MATRIX_PAGE_SIZE = 50; // Forge SQL responses are limited to 4 MiB.
 const MAX_PENDING_COMMENT_ROWS = 200;
 const UNRECORDED_SOURCES = new Set(['panel']);
 
@@ -35,8 +37,9 @@ async function execute(action, query, params = []) {
   try {
     return await sql.prepare(query).bindParams(...params).execute();
   } catch (error) {
-    console.error(`[TG] SQL failed to ${action}: ${error.code ?? 'UNKNOWN'} ${error.message}`);
-    throw new Error(`Could not ${action}.`);
+    const traceId = error.responseDetails?.traceId;
+    console.error(`[TG] SQL failed to ${action}: ${errorLabel(error)}${traceId ? ` (trace ${traceId})` : ''}`);
+    throw Object.assign(new Error(`Could not ${action}.`), { code: 'SQL_FAILED' });
   }
 }
 
@@ -103,7 +106,7 @@ function findRemovedKeys(scanResult, savedKeys) {
   if (scanResult.requirements.length === 0 && savedKeys.length > 0) {
     return {
       removedKeys: [],
-      warnings: ['Jira returned no requirements, so saved data was kept. Check the Requirement JQL and app access.'],
+      warnings: ['Jira returned no requirements, so TraceGuard kept the saved data and you should check the Requirement JQL.'],
     };
   }
 
@@ -230,13 +233,26 @@ function toRequirement({ gaps_json: gapsJson, chain_json: chainJson, ...row }) {
   return { ...row, gaps: JSON.parse(gapsJson), chain: JSON.parse(chainJson) };
 }
 
-export async function getMatrix(projectKey) {
-  await ensureMigrations();
+async function readMatrixPage(projectKey, afterKey) {
   const { rows } = await execute(
     'load the matrix',
-    'SELECT * FROM tg_requirements WHERE project_key = ?',
-    [projectKey],
+    `SELECT * FROM tg_requirements WHERE project_key = ? AND req_key > ?
+     ORDER BY req_key LIMIT ${MATRIX_PAGE_SIZE}`,
+    [projectKey, afterKey],
   );
+  return rows;
+}
+
+export async function getMatrix(projectKey) {
+  await ensureMigrations();
+
+  const rows = [];
+  let page;
+  do {
+    page = await readMatrixPage(projectKey, rows.at(-1)?.req_key ?? '');
+    rows.push(...page);
+  } while (page.length === MATRIX_PAGE_SIZE);
+
   return sortByKeyNumber(rows).map(toRequirement);
 }
 
@@ -271,15 +287,15 @@ export async function getStoredRequirements(keys) {
 
 export async function getHistory(projectKey, limit = 30) {
   await ensureMigrations();
+  const safeLimit = Math.min(Math.max(1, Math.trunc(Number(limit)) || 30), MAX_HISTORY_ROWS);
   const { rows } = await execute(
     'load scan history',
     `SELECT ${SCAN_RUN_COLUMNS} FROM tg_scan_runs
      WHERE project_key = ? AND finished_at IS NOT NULL
-     ORDER BY finished_at DESC, started_at DESC LIMIT ${MAX_HISTORY_ROWS}`,
+     ORDER BY finished_at DESC, started_at DESC LIMIT ${safeLimit}`,
     [projectKey],
   );
-  const safeLimit = Math.min(Math.max(1, Math.trunc(Number(limit)) || 30), MAX_HISTORY_ROWS);
-  return rows.slice(0, safeLimit);
+  return rows;
 }
 
 export async function getLatestScanRun(projectKey) {

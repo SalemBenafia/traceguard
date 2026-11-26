@@ -5,7 +5,7 @@ import { errorMessage, StatusMessage } from './StatusMessage';
 
 const SPACE_FIELD_ID = 'tg-audit-space';
 const RELEASE_FIELD_ID = 'tg-audit-release';
-const CREATE_ERROR = 'The audit pack could not be created. Please try again.';
+const CREATE_ERROR = 'The audit pack could not be created, so click Create audit pack to try again.';
 
 const fieldStyle = xcss({ width: '260px' });
 

@@ -227,14 +227,14 @@ describe('evaluate: several tests', () => {
     assert.deepEqual(gapCodes(result), ['TEST_FAILED']);
     assert.equal(result.rag, 'red');
     assert.deepEqual(result.counts, { impl: 1, implDone: 1, tests: 2, passed: 1, failed: 1 });
-    assert.match(result.gaps[0].message, /1 linked test/);
+    assert.match(result.gaps[0].message, /1 linked verification/);
   });
 
   test('the failure message counts every failed test', () => {
     const links = [storyLink(), failedTest({ key: 'SPF-22' }), failedTest({ key: 'SPF-23' })];
     const result = evaluate(requirement(), links, SETTINGS);
 
-    assert.match(result.gaps[0].message, /2 linked test/);
+    assert.match(result.gaps[0].message, /2 linked verification/);
   });
 
   test('one passed and one not-run test raises TEST_NOT_RUN', () => {
@@ -243,7 +243,7 @@ describe('evaluate: several tests', () => {
 
     assert.deepEqual(gapCodes(result), ['TEST_NOT_RUN']);
     assert.equal(result.rag, 'amber');
-    assert.match(result.gaps[0].message, /1 linked test/);
+    assert.match(result.gaps[0].message, /1 linked verification/);
   });
 
   test('one failed and one not-run test raises both gaps', () => {

@@ -1,9 +1,16 @@
 import { kvs, WhereConditions } from '@forge/kvs';
+import { errorLabel } from './engine/errors';
 
 const SETTINGS_PREFIX = 'settings:';
 const SETTINGS_PAGE_SIZE = 20;
 const MAX_JQL_LENGTH = 1000;
-const LIST_FIELDS = ['implementationTypes', 'testTypes', 'passedStatuses', 'failedStatuses'];
+const LIST_LABELS = {
+  implementationTypes: 'Implementation work types',
+  testTypes: 'Verification work types',
+  passedStatuses: 'Passed statuses',
+  failedStatuses: 'Failed statuses',
+};
+const LIST_FIELDS = Object.keys(LIST_LABELS);
 
 // Marks errors whose message is safe and useful to show to the user.
 export class SettingsValidationError extends Error {}
@@ -21,13 +28,13 @@ export const defaultSettings = (projectKey) => ({
 });
 
 function storageError(action, projectKey, cause) {
-  console.error(`[TG] Failed to ${action} settings for ${projectKey}: ${cause.message}`);
+  console.error(`[TG] Failed to ${action} settings for ${projectKey}: ${errorLabel(cause)}`);
   return new Error(`Could not ${action} TraceGuard settings.`);
 }
 
 function requireText(value, label) {
   if (typeof value !== 'string') {
-    throw new SettingsValidationError(`${label} must be text.`);
+    throw new SettingsValidationError(`Enter ${label} as plain text.`);
   }
   return value.trim();
 }
@@ -36,7 +43,7 @@ function requireText(value, label) {
 function toCleanList(value, field) {
   const items = typeof value === 'string' ? value.split(',') : value;
   if (!Array.isArray(items) || items.some((item) => typeof item !== 'string')) {
-    throw new SettingsValidationError(`${field} must be a comma-separated list.`);
+    throw new SettingsValidationError(`Enter ${LIST_LABELS[field]} as a comma-separated list.`);
   }
   return items.map((item) => item.trim()).filter(Boolean);
 }
@@ -44,18 +51,18 @@ function toCleanList(value, field) {
 function validateJql(value) {
   const jql = requireText(value, 'Requirement JQL');
   if (!jql) {
-    throw new SettingsValidationError('Requirement JQL is required.');
+    throw new SettingsValidationError('Enter a Requirement JQL so TraceGuard can find your requirements.');
   }
   if (jql.length >= MAX_JQL_LENGTH) {
-    throw new SettingsValidationError(`Requirement JQL must be under ${MAX_JQL_LENGTH} characters.`);
+    throw new SettingsValidationError(`Shorten the Requirement JQL to under ${MAX_JQL_LENGTH} characters.`);
   }
   return jql;
 }
 
 function validateSpaceKey(value) {
-  const spaceKey = requireText(value, 'Audit space key');
+  const spaceKey = requireText(value, 'the Confluence space key');
   if (!/^[a-zA-Z0-9]*$/.test(spaceKey)) {
-    throw new SettingsValidationError('Audit space key can only contain letters and digits.');
+    throw new SettingsValidationError('Use only letters and digits in the Confluence space key.');
   }
   return spaceKey;
 }
@@ -63,10 +70,10 @@ function validateSpaceKey(value) {
 // Returns only known fields, so extra data from the client is never stored.
 export function validateSettings(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
-    throw new SettingsValidationError('Settings are missing.');
+    throw new SettingsValidationError('Fill in the settings form and click Save again.');
   }
   if (typeof input.commentOnNewGaps !== 'boolean') {
-    throw new SettingsValidationError('Comment on new gaps must be on or off.');
+    throw new SettingsValidationError('Turn Comment on new gaps on or off, then click Save again.');
   }
 
   const lists = Object.fromEntries(

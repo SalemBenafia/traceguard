@@ -7,6 +7,7 @@ import {
   removeOldCommentSlots,
   reserveCommentSlot,
 } from './db/repo';
+import { errorLabel } from './engine/errors';
 import { buildGapComment, utcDay } from './engine/gapComment';
 import { RequirementJqlError } from './engine/jql';
 import { addComment } from './jira/client';
@@ -15,7 +16,7 @@ import { getSettings } from './settings';
 
 const MAX_COMMENTS_PER_DAY = 20;
 const COMMENT_TIME_RESERVE_MS = 60_000;
-const PROJECT_FAILED = 'The nightly job could not finish for this project. Check the app logs.';
+const PROJECT_FAILED = 'The nightly job could not finish for this project, so check the app logs and run it again.';
 
 async function postComment(projectKey, pending, day, slot) {
   if (!(await claimPendingComment(pending.eventId))) {
@@ -27,7 +28,7 @@ async function postComment(projectKey, pending, day, slot) {
     await addComment(pending.reqKey, buildGapComment(pending));
     return true;
   } catch (error) {
-    console.error(`[TG] Could not comment on ${pending.reqKey}: ${error.message}`);
+    console.error(`[TG] Could not comment on ${pending.reqKey}: ${errorLabel(error)}`);
     await releasePendingComment(projectKey, pending);
     await releaseCommentSlot(day, slot);
     return false;
@@ -77,12 +78,12 @@ const failureMessage = (error) => (error instanceof RequirementJqlError ? error.
 export async function runNightly({ projectKeys, deadlineAt, scanBudgetMs = null, graphAsUser = false }) {
   const summary = { scanned: 0, commentsPosted: 0, commentsWaiting: 0, warnings: [], failures: [] };
   await removeOldCommentSlots(utcDay()).catch((error) => {
-    console.error(`[TG] Could not remove old comment limits: ${error.message}`);
+    console.error(`[TG] Could not remove old comment limits: ${errorLabel(error)}`);
   });
 
   for (const projectKey of projectKeys) {
     if (Date.now() >= deadlineAt) {
-      summary.warnings.push(`Ran out of time before scanning ${projectKey}.`);
+      summary.warnings.push(`The nightly job ran out of time before ${projectKey}, so run it again for that project.`);
       continue;
     }
 
@@ -97,7 +98,7 @@ export async function runNightly({ projectKeys, deadlineAt, scanBudgetMs = null,
       summary.commentsWaiting += waiting;
       summary.warnings.push(...scan.warnings);
     } catch (error) {
-      console.error(`[TG] Nightly job failed for ${projectKey}: ${error.message}`);
+      console.error(`[TG] Nightly job failed for ${projectKey}: ${errorLabel(error)}`);
       summary.failures.push({ projectKey, message: failureMessage(error) });
     }
   }

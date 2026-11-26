@@ -7,7 +7,7 @@ const ISSUE_KEY = /^[A-Za-z][A-Za-z0-9_]*-\d+$/;
 export class RequirementJqlError extends Error {}
 
 const invalidJql = () =>
-  new RequirementJqlError('The Requirement JQL has unbalanced quotes or brackets. Fix it in Settings.');
+  new RequirementJqlError('Fix the unbalanced quotes or brackets in the Requirement JQL in Settings.');
 
 const startsOrderBy = (jql, index) =>
   !/\w/.test(jql[index - 1] ?? '') && /^order\s+by\b/i.test(jql.slice(index));

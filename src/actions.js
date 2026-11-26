@@ -12,6 +12,7 @@ import {
   toTraceSummary,
 } from './engine/agentViews';
 import { AuditPackError } from './engine/auditPack';
+import { errorLabel } from './engine/errors';
 import { RequirementJqlError } from './engine/jql';
 import { filterForViewer, referencedIssueKeys } from './engine/visibility';
 import { hasProjectPermission, visibleIssueKeys } from './jira/client';
@@ -20,10 +21,10 @@ import { getSettings } from './settings';
 import { matrixForViewer } from './viewerData';
 
 const FIRST_SCAN_BUDGET_MS = 35_000;
-const ASK_FOR_PROJECT = 'Which Jira project? Give me a key such as SPF.';
-const GENERIC_ERROR = 'TraceGuard could not complete this request. Please try again.';
+const ASK_FOR_PROJECT = 'Tell me the Jira project key, such as SPF.';
+const GENERIC_ERROR = 'TraceGuard could not complete this request, so try again in a moment.';
 
-const noAccess = (projectKey) => ({ error: `You do not have access to project ${projectKey}.` });
+const noAccess = (projectKey) => ({ error: `You do not have access to project ${projectKey}, so ask a project admin for access.` });
 const isConsentError = (error) => error?.name === 'NEEDS_AUTHENTICATION_ERR';
 
 async function canBrowse(projectKey, context) {
@@ -32,7 +33,7 @@ async function canBrowse(projectKey, context) {
     return await hasProjectPermission(projectKey, 'BROWSE_PROJECTS');
   } catch (error) {
     if (isConsentError(error)) throw error;
-    console.error(`[TG] Could not check access to ${projectKey}: ${error.message}`);
+    console.error(`[TG] Could not check access to ${projectKey}: ${errorLabel(error)}`);
     return false;
   }
 }
@@ -44,7 +45,7 @@ const asAction = (name, handler) => async (payload, context) => {
   } catch (error) {
     if (isConsentError(error)) throw error;
     if (error instanceof AuditPackError || error instanceof RequirementJqlError) return { error: error.message };
-    console.error(`[TG] Action ${name} failed: ${error.message}`);
+    console.error(`[TG] Action ${name} failed: ${errorLabel(error)}`);
     return { error: GENERIC_ERROR };
   }
 };
@@ -79,7 +80,7 @@ export const requirementTrace = asAction('tg-get-requirement-trace', async (payl
   if (!(await canBrowse(projectKey, context))) return noAccess(projectKey);
 
   // A hidden requirement gets the same answer as one that does not exist.
-  const notFound = { error: `TraceGuard has no saved trace for ${key}.` };
+  const notFound = { error: `TraceGuard has no saved trace for ${key}, so check the key or run a scan.` };
   const row = await getRequirement(projectKey, key);
   if (!row) return notFound;
 

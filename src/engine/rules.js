@@ -27,12 +27,12 @@ export function evaluate(requirement, links, settings) {
   const gaps = [];
   const add = (code, severity, message) => gaps.push({ code, severity, message });
 
-  if (implementation.length === 0) add('NO_IMPLEMENTATION', 'red', 'No linked story, task or bug.');
-  if (tests.length === 0) add('NO_TEST', 'red', 'No linked test.');
-  if (failed.length > 0) add('TEST_FAILED', 'red', `${failed.length} linked test(s) failed.`);
-  if (notRun.length > 0) add('TEST_NOT_RUN', 'amber', `${notRun.length} linked test(s) have not run.`);
+  if (implementation.length === 0) add('NO_IMPLEMENTATION', 'red', 'No implementation is linked.');
+  if (tests.length === 0) add('NO_TEST', 'red', 'No verification is linked.');
+  if (failed.length > 0) add('TEST_FAILED', 'red', `${failed.length} linked verification item(s) failed.`);
+  if (notRun.length > 0) add('TEST_NOT_RUN', 'amber', `${notRun.length} linked verification item(s) have not run.`);
   if (isStale(requirement, passed)) {
-    add('STALE_VERIFICATION', 'red', 'Requirement changed after its last passing test.');
+    add('STALE_VERIFICATION', 'red', 'Requirement changed after its last passed verification.');
   }
   if (implementation.some((item) => item.statusCategory !== 'done')) {
     add('IMPLEMENTATION_OPEN', 'amber', 'Some implementation work is not done.');
