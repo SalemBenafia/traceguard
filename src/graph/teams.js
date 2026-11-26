@@ -1,5 +1,5 @@
 import api from '@forge/api';
-import { kvs } from '@forge/kvs';
+import { kvs, WhereConditions } from '@forge/kvs';
 import { errorLabel } from '../engine/errors';
 import { isFreshTeamCache, parseTeams, TEAMS_OPERATION_NAME } from '../engine/teams';
 
@@ -35,7 +35,9 @@ const NO_TEAM_HINT =
   '[TG] Teamwork Graph returned no team - check scopes read:graph:user:atlassian and ' +
   'read:graph:team:atlassian, the saved query key, and that the user is in a team.';
 
-const teamCacheKey = (accountId) => `team:${accountId}`;
+const TEAM_CACHE_PREFIX = 'team:';
+const TEAM_CACHE_PAGE_SIZE = 20;
+const teamCacheKey = (accountId) => `${TEAM_CACHE_PREFIX}${accountId}`;
 const queryKeyVariable = () => process.env.TWG_USER_TEAMS_QUERY_KEY;
 
 const graphError = (code) => Object.assign(new Error('Teamwork Graph request failed.'), { code });
@@ -119,3 +121,22 @@ export function createTeamLookup({ canCallGraph = false } = {}) {
     return teamsByOwner.get(accountId);
   };
 }
+
+// Personal data reporting: every cached owner and when their teams were read.
+export async function listCachedTeamOwners() {
+  const owners = [];
+  let cursor;
+  do {
+    let query = kvs.query().where('key', WhereConditions.beginsWith(TEAM_CACHE_PREFIX)).limit(TEAM_CACHE_PAGE_SIZE);
+    if (cursor) query = query.cursor(cursor);
+
+    const page = await query.getMany();
+    for (const { key, value } of page.results) {
+      owners.push({ accountId: key.slice(TEAM_CACHE_PREFIX.length), cachedAt: value?.cachedAt });
+    }
+    cursor = page.nextCursor;
+  } while (cursor);
+  return owners;
+}
+
+export const deleteCachedTeam = (accountId) => kvs.delete(teamCacheKey(accountId));

@@ -3,6 +3,7 @@ import { sql } from '@forge/sql';
 import { errorLabel } from '../engine/errors';
 import { gapMessage, groupKeysByProject } from '../engine/gapComment';
 import { batchByBytes, chunk, diffGaps, gapEventId, sortByKeyNumber } from '../engine/gapDiff';
+import { FORMER_USER } from '../engine/privacy';
 import { ensureMigrations } from './migrations';
 
 const MAX_ROWS_PER_WRITE = 50;
@@ -391,3 +392,38 @@ export async function getOpenGaps(projectKey) {
   );
   return sortByKeyNumber(rows);
 }
+
+// Personal data reporting: each owner with the oldest time their data was read.
+export async function getStoredOwners() {
+  await ensureMigrations();
+  const { rows } = await execute(
+    'read stored owners',
+    `SELECT owner_account_id, MIN(scanned_at) AS oldest_scanned_at FROM tg_requirements
+     WHERE owner_account_id IS NOT NULL GROUP BY owner_account_id`,
+  );
+  return rows;
+}
+
+async function updateOwners(action, setClause, setParams, accountIds) {
+  await ensureMigrations();
+  for (const batch of chunk(accountIds, MAX_KEYS_PER_STATEMENT)) {
+    await execute(
+      action,
+      `UPDATE tg_requirements SET ${setClause} WHERE owner_account_id IN (${placeholders(batch.length)})`,
+      [...setParams, ...batch],
+    );
+  }
+}
+
+// A closed account keeps no id, name or team, so the matrix shows "Former user".
+export const anonymiseOwners = (accountIds) =>
+  updateOwners(
+    'anonymise closed accounts',
+    'owner_account_id = NULL, owner_name = ?, owner_team = NULL',
+    [FORMER_USER],
+    accountIds,
+  );
+
+// The next scan reads the name from Jira again and looks the team up again.
+export const clearOwnerTeams = (accountIds) =>
+  updateOwners('clear stale owner teams', 'owner_team = NULL', [], accountIds);

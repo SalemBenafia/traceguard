@@ -111,7 +111,7 @@ export const testsLabel = (counts) =>
   `${counts?.passed ?? 0}/${counts?.failed ?? 0}/${counts?.tests ?? 0}`;
 
 // Saved DATETIME values have no time zone and are always written in UTC.
-function parseScanTime(value) {
+export function parseScanTime(value) {
   const match = SCAN_TIME.exec(value);
   if (!match) return null;
 

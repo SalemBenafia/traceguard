@@ -11,7 +11,7 @@ TraceGuard builds a live matrix that links every requirement to its implementati
 | Dashboard: Overview, Matrix, Gaps, History, Settings | `jira:projectPage` |
 | Trace for the open work item | `jira:issuePanel` |
 | Live updates when work items or links change | `trigger` |
-| Nightly scan and Jira comments on new gaps | `scheduledTrigger` |
+| Nightly scan, gap comments and daily privacy check | `scheduledTrigger` |
 | Chat about audit status and create audit packs | `rovo:agent` + 4 `action` modules |
 | Matrix, scan history and gap history | Forge SQL (`sql`) |
 | Settings and short-lived caches | KVS |
@@ -46,22 +46,19 @@ npm run seed                           # remove later: npm run seed:reset
 ```text
 MATCH (user:AtlassianUser {ari: $id})-[:atlassian_user_is_in_atlassian_team]->(team:AtlassianTeam)
 RETURN collect(distinct team) as teams
-
 forge variables set -e development TWG_USER_TEAMS_QUERY_KEY <query-key>
 forge deploy -e development
 ```
 
 ## 4. How to test in under 5 minutes
 
-These steps use the demo data in project `SPF`.
-
-1. **Project page:** open TraceGuard and click **Run first scan**. Expect 20 requirements: 9 Green, 4 Amber, 7 Red, 45% audit-ready.
+1. **Project page** (demo data in `SPF`): open TraceGuard and click **Run first scan**. Expect 20 requirements: 9 Green, 4 Amber, 7 Red, 45% audit-ready.
 2. **Live update:** open `SPF-3`, open its linked Test and move it from Failed to Passed. Step 8 checks the result.
 3. **Matrix and Gaps:** in **Matrix**, set Status to Red and try the Team filter. **Gaps** groups the gaps by type.
 4. **Issue panel:** open `SPF-7`, then **Traceability** from the Apps button. It shows the requirement changed after its last passed test. Its linked Story shows the requirement it supports.
 5. **Nightly job:** in **Settings**, click **Run nightly job now**. Then open `SPF-5` and see the TraceGuard gap comment.
 6. **Audit pack:** on **Overview**, enter your space key and release `2.4.0`, click **Create audit pack** and open the link.
-7. **Rovo:** in Rovo chat, choose **TraceGuard Audit Assistant**. Ask `Which requirements are not audit-ready in SPF?`, then `Explain the trace for SPF-7`, then `Create an audit pack for SPF in space <your key>`.
+7. **Rovo:** in Rovo chat, choose **TraceGuard Audit Assistant**. Ask `Which requirements are not audit-ready in SPF?`, then `Explain SPF-7`, then `Create an audit pack for SPF`.
 8. **History:** up to 3 minutes after step 2, reload TraceGuard. **History** shows a **Jira update** scan, and Overview shows 10 Green, 4 Amber, 6 Red, 50%.
 
 ## 5. Architecture, data and permissions
@@ -76,9 +73,9 @@ Daily scheduled trigger -------------+      |-- Rule engine: pure, unit-tested g
                                             +-- Confluence REST: audit pack (as the user)
 ```
 
-**Access:** screens and Rovo show only work items the user can see in Jira. Scans read Jira as the app, so shared results do not depend on who clicked. The app makes no external calls.
+**Access:** screens and Rovo show only work items the user can see. Scans read Jira as the app, and the app makes no external calls.
 
-**Data stored per install:** Forge SQL keeps requirement keys, summaries, statuses, owner IDs, names and teams, gaps, links, scan history and queued comments. KVS keeps settings and short-lived caches.
+**Data stored per install:** Forge SQL keeps the matrix, owners, gaps, links and scan history. KVS keeps settings and short-lived caches.
 
 | Scope | Why it is needed |
 |---|---|
@@ -90,10 +87,13 @@ Daily scheduled trigger -------------+      |-- Rule engine: pure, unit-tested g
 | `read:space:confluence`, `read:page:confluence` | Find the space and avoid duplicate page titles |
 | `write:page:confluence` | Create the audit pack page |
 
-## 6. Known limits
+## 6. Privacy
+
+TraceGuard stores the account IDs, names and teams of requirement owners. A daily job reports them with the Forge privacy API. For a **closed** account, the owner becomes "Former user" and its ID and teams are deleted. For an **updated** account, saved teams are cleared and later scans read the data again. Logs hold only counts. Published audit packs and Jira comments are not changed.
+
+## 7. Known limits
 
 - Each scan covers up to **500 requirements**.
 - Jira events can take **up to 3 minutes** to update TraceGuard.
 - A manual Rescan runs for about 15 seconds, so large projects finish in the nightly scan.
-- TraceGuard posts at most 20 gap comments per day on each site.
-- An audit pack is visible to everyone who can view its Confluence space.
+- At most 20 gap comments per day per site. An audit pack is visible to everyone in its Confluence space.
